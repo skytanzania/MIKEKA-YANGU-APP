@@ -1,0 +1,6 @@
+{
+  "name": "Mikeka App - Flutter Mobile",
+  "description": "Programu kamili ya Flutter ya Mikeka ya Leo Tanzania ikiwa na tipsters, mikeka ya VIP, malipo ya USSD, na ufuatiliaji wa washindi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
