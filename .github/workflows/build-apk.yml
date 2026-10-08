@@ -29,8 +29,8 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Verify Flutter Installation
-        run: flutter doctor -v
+      - name: Generate Compatible Android Gradle Scaffold
+        run: flutter create . --platforms android --org com.mikekaapp.tz
 
       - name: Get Flutter Packages
         run: flutter pub get
