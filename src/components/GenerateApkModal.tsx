@@ -253,11 +253,60 @@ echo "APK iko tayari: build/app/outputs/flutter-apk/app-release.apk"`;
                 <span>Pakua main.dart</span>
               </button>
               <button
-                onClick={handleDownloadBuildScript}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-all"
+                onClick={() => {
+                  const yml = `name: Build Mikeka Flutter APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter Installation
+        run: flutter doctor -v
+
+      - name: Get Flutter Packages
+        run: flutter pub get
+
+      - name: Build Release APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mikeka-app-release-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 30`;
+                  navigator.clipboard.writeText(yml);
+                  showSnack('Faili la build-apk.yml limenakiliwa!');
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-[#00FFC8]/15 hover:bg-[#00FFC8]/25 border border-[#00FFC8]/40 text-xs font-black text-[#00FFC8] flex items-center justify-center gap-1.5 transition-all"
               >
-                <Terminal className="w-3.5 h-3.5 text-[#FFD700]" />
-                <span>Pakua build_apk.sh</span>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Nakili build-apk.yml</span>
               </button>
             </div>
           </div>
