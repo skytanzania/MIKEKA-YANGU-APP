@@ -29,14 +29,16 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate Compatible Android Gradle Scaffold
-        run: flutter create . --platforms android --org com.mikekaapp.tz
+      - name: Clean Conflicting Android Files and Recreate Clean Scaffold
+        run: |
+          rm -rf android
+          flutter create . --platforms android --org com.mikekaapp.tz
 
       - name: Get Flutter Packages
         run: flutter pub get
 
       - name: Build Release APK
-        run: flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
