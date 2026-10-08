@@ -1946,7 +1946,8 @@ class _ProfileTabState extends State<ProfileTab> {
         children: [
           Row(
             children: [
-              const Icon(Icons.crown, color: AppColors.gold, size: 22),
+              // FIXED: Icons.crown → Icons.workspace_premium (crown is not a valid Material icon)
+              const Icon(Icons.workspace_premium, color: AppColors.gold, size: 22),
               const SizedBox(width: 8),
               Text('KIFURUSHI: ${packageType.toUpperCase()}',
                   style: const TextStyle(
@@ -3095,7 +3096,9 @@ void _showSnack(BuildContext context, String message, {bool isError = false}) {
   );
 }
 
-Future<void> _showLoginPrompt(BuildContext context) async {
+// FIXED: Changed return type from Future<void> to Future<bool>
+// because the function already returns `return result ?? false;`
+Future<bool> _showLoginPrompt(BuildContext context) async {
   final phoneCtrl = TextEditingController();
   bool loading = false;
 
