@@ -6,7 +6,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -324,7 +323,7 @@ class AppState extends ChangeNotifier {
 
   void applyUserData(Map<String, dynamic> d) {
     user = Map<String, dynamic>.from(d['user'] ?? {});
-    displayPhone = d['display_phone'];
+    displayPhone = d['display_phone']?.toString();
     subscription = d['subscription'] != null ? Map<String, dynamic>.from(d['subscription']) : null;
     payments = d['payments'] ?? [];
     todaysSlips = d['todays_slips'] ?? [];
@@ -936,7 +935,7 @@ class _TipstersTabState extends State<TipstersTab> {
     return InkWell(
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => TipsterDetailScreen(tipsterId: t['id'])),
+        MaterialPageRoute(builder: (_) => TipsterDetailScreen(tipsterId: _asInt(t['id']))),
       ),
       borderRadius: BorderRadius.circular(16),
       child: Container(
@@ -1037,7 +1036,7 @@ class _TipstersTabState extends State<TipstersTab> {
                   isFollowing ? 'following' : 'follow',
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
                 ),
-                onPressed: () => _toggleFollow(t['id'], isFollowing),
+                onPressed: () => _toggleFollow(_asInt(t['id']), isFollowing),
               ),
             ),
           ],
@@ -2012,7 +2011,11 @@ class _ProfileTabState extends State<ProfileTab> {
     if (ok != true) return;
     final res = await ApiClient.post('update_phone', data: {'phone': ctrl.text.trim()});
     if (context.mounted) {
-      _showSnack(context, res.success ? (res['message'] ?? 'Imebadilishwa') : (res.error ?? 'Hitilafu'),
+      _showSnack(
+          context,
+          res.success
+              ? (res['message']?.toString() ?? 'Imebadilishwa')
+              : (res.error ?? 'Hitilafu'),
           isError: !res.success);
       if (res.success) {
         final u = await ApiClient.post('get_user_data');
@@ -3079,6 +3082,14 @@ class _BuySingleSlipScreenState extends State<BuySingleSlipScreen> {
 // ============================================================
 // SHARED HELPERS
 // ============================================================
+
+/// The PHP API may send ids as numbers (5) or as text ("5"); accept both.
+int _asInt(dynamic v) {
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse(v?.toString() ?? '') ?? 0;
+}
+
 void _showSnack(BuildContext context, String message, {bool isError = false}) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
@@ -3128,7 +3139,7 @@ Future<bool> _showLoginPrompt(BuildContext context) async {
           ],
         ),
         content: Column(
-          mainAxisSize: Completer.sync().isCompleted ? MainAxisSize.max : MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(

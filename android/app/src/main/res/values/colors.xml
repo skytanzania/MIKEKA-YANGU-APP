@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same dark background as the app (AppColors.bg) so the splash has no white flash -->
+    <color name="splash_background">#000010</color>
+</resources>

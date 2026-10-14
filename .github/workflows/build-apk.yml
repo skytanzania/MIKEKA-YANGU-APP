@@ -23,26 +23,30 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
+      # Flutter is pinned on purpose. The android/ folder in this repo is built for
+      # Flutter 3.38.x (Gradle 8.14, AGP 8.11.1, Kotlin 2.2.20). Newer Flutter
+      # releases use AGP 9, which the current notification/device-info plugin
+      # versions do not support yet. Upgrade Flutter and the plugins together.
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.38.10'
           cache: true
 
-      - name: Clean Conflicting Android Files and Recreate Clean Scaffold
-        run: |
-          rm -rf android
-          flutter create . --platforms android --org com.mikekaapp.tz
+      - name: Show Flutter version
+        run: flutter --version
 
       - name: Get Flutter Packages
         run: flutter pub get
 
       - name: Build Release APK
-        run: flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
+        run: flutter build apk --release
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: mikeka-app-release-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
           retention-days: 30
