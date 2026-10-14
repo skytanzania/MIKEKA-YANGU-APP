@@ -36,6 +36,12 @@ flutter build apk --release
 
 - Kila `push` kwenye `main` inajenga APK moja kwa moja (`.github/workflows/build-apk.yml`).
 - Pakua APK: **Actions** → chagua run iliyofanikiwa → **Artifacts** → `mikeka-app-release-apk`.
+- Faili la Play Store (AAB iliyosainiwa): **Artifacts** → `mikeka-app-playstore-aab` → pakia `app-release.aab` kwenye Google Play Console.
+- AAB inasainiwa kwa "upload key" iliyohifadhiwa kwenye **Settings → Secrets and variables → Actions**:
+  `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+  Kama secrets hazipo, APK bado inajengwa lakini AAB inarukwa.
+- ⚠️ Usiweke keystore (`.jks`) wala `android/key.properties` kwenye repo hii — ni ya umma (public).
+- Version code inaongezeka yenyewe kila build (`github.run_number`); badilisha version name kwenye `pubspec.yaml`.
 - Flutter imefungwa kwenye toleo **3.38.10** (Gradle 8.14, AGP 8.11.1, Kotlin 2.2.20). Folda ya `android/` imetengenezwa kwa toleo hilo — usiifute wala kuitengeneza upya kwa `flutter create`.
 - Ukitaka kupandisha Flutter, pandisha pia plugins (`flutter_local_notifications`, `device_info_plus`) na matoleo ya Gradle kwenye `android/settings.gradle.kts` kwa pamoja.
 

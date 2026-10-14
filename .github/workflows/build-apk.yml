@@ -9,8 +9,13 @@ on:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Android APK + Play Store AAB
     runs-on: ubuntu-latest
+
+    env:
+      # Every run gets a higher version code, which Google Play requires
+      # for each new upload. The version name comes from pubspec.yaml.
+      BUILD_NUMBER: ${{ github.run_number }}
 
     steps:
       - name: Checkout Repository
@@ -40,8 +45,42 @@ jobs:
       - name: Get Flutter Packages
         run: flutter pub get
 
+      # The upload key lives only in repository secrets (Settings → Secrets and
+      # variables → Actions). Secrets are not available to pull requests.
+      - name: Set up release signing (Play upload key)
+        id: signing
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -z "$KEYSTORE_BASE64" ] && missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -z "$KEYSTORE_PASSWORD" ] && missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && missing="$missing ANDROID_KEY_ALIAS"
+          [ -z "$KEY_PASSWORD" ] && missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::warning title=Play Store AAB skipped::Missing repository secrets:$missing. Add them in Settings → Secrets and variables → Actions, then re-run this workflow."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/upload-keystore.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+          # Fail early with a clear message if a password or alias is wrong.
+          keytool -list -keystore "$RUNNER_TEMP/upload-keystore.jks" \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null \
+            || { echo "::error::The keystore, password or alias in the secrets is wrong."; exit 1; }
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
       - name: Build Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --build-number="$BUILD_NUMBER"
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -50,3 +89,40 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Build Play Store App Bundle (AAB)
+        if: steps.signing.outputs.signed == 'true'
+        run: flutter build appbundle --release --build-number="$BUILD_NUMBER"
+
+      - name: Check the AAB is signed with the upload key
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          AAB=build/app/outputs/bundle/release/app-release.aab
+          CERT=$(keytool -printcert -jarfile "$AAB")
+          echo "$CERT" | grep -E "Owner:|SHA256:" | head -2
+          if echo "$CERT" | grep -q "CN=Android Debug"; then
+            echo "::error::The AAB is signed with the debug key; Google Play will reject it."
+            exit 1
+          fi
+          {
+            echo "### ✅ Signed Play Store bundle ready"
+            echo ""
+            echo "Download **mikeka-app-playstore-aab** below and upload app-release.aab to Google Play Console."
+            echo ""
+            echo "- Version code: \`$BUILD_NUMBER\`"
+            echo "- Version name: \`$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')\`"
+            echo "- Upload key: \`$(echo "$CERT" | grep -m1 'SHA256:' | sed 's/.*SHA256: *//')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Play Store AAB Artifact
+        if: steps.signing.outputs.signed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mikeka-app-playstore-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove signing files
+        if: always()
+        run: rm -f android/key.properties "$RUNNER_TEMP/upload-keystore.jks"
