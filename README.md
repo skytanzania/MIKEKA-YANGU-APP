@@ -1,8 +1,10 @@
 # MIKEKA APP — FLUTTER MOBILE APPLICATION
 
 Programu kamili ya simu ya Mikeka ya Leo Tanzania (Single-File Complete Flutter App).
-Huu mradi umejengwa kwa kutumia faili kamili la Dart (`lib/main.dart`) linalounganishwa na REST API ya moja kwa moja kwenye:
-`https://mikekaapp.co.tz/api.php` (inayoelekeza kwenye `https://mikekaapp.co.tz/api`).
+Huu mradi umejengwa kwa kutumia faili kamili la Dart (`lib/main.dart`) linalounganishwa na **MIKEKA APP REST API v1**:
+`https://mikekaapp.co.tz/api.php` — orodha ya endpoints: `https://mikekaapp.co.tz/api.php?route=docs`.
+
+Maelezo kamili ya API (endpoints, majibu, error codes, mfano wa Dart): [`docs/API.md`](docs/API.md).
 
 ---
 
@@ -88,6 +90,39 @@ flutter build apk --release
    - Dirisha maalum la pongezi ya ushindi na malipo (Victory celebration)
 
 6. **Tahadhari & Ushindi**:
-   - Uchunguzi wa ushindi kila baada ya sekunde 20 (`check_new_win`)
-   - Onyesho la kombe la dhahabu 🏆 ("UMESHINDA!")
-   - Tahadhari za akaunti na usalama wa session (`check_session`)
+   - Popup ya ushindi wa leo app inapofunguliwa (`popups/win`) na ukaguzi wa ushindi mpya kila sekunde 20 (`popups/new-win`)
+   - Onyesho la kombe la dhahabu 🏆 ("UMESHINDA!") + "Usionyeshe tena" (`popups/dismiss`)
+   - Tahadhari za akaunti (malipo yaliyoshindikana mara nyingi, ujumbe wa admin) (`popups/warnings`)
+   - Session inakaguliwa kila sekunde 60 (`auth/check`): ukiingia kwenye simu nyingine, ukifungiwa au ukisitishwa na admin, app inakutoa na kuonyesha sababu
+
+7. **Tipster Tools** (kwa akaunti zenye `is_tipster = 1`):
+   - Profile → "Mikeka Yangu (Tipster)": kuona, kuweka, kuficha na kufuta mikeka yako (pamoja na mikeka ya SINGLE yenye bei)
+
+8. **Usalama & Uwazi**:
+   - App haiulizi PIN ya mobile money kamwe — PIN inawekwa kwenye ujumbe wa USSD wa mtandao tu
+   - Booking code zinafichwa na **server** (`ABC***`) kwa wasiolipia — code kamili haitumwi kwenye simu yao
+   - Sera ya Faragha, Vigezo na Masharti, onyo la 18+ na msaada (`admin@mikekaapp.co.tz`) vinatoka kwenye `GET config`
+
+---
+
+## 🔌 Jinsi App Inavyotumia API v1
+
+| Kazi kwenye app | Endpoint |
+|---|---|
+| Kuanza app (bei, vifurushi, mitandao, links, sera) | `GET config` |
+| Kuingia / kujisajili | `POST auth/login` → (namba mpya) `POST auth/confirm` → `token` |
+| Taarifa zote za mtumiaji | `GET me` |
+| Tipsters / profile ya tipster | `GET tipsters`, `GET tipsters/{id}` |
+| Kufuata / kuacha kufuata | `POST tipsters/{id}/follow`, `POST tipsters/{id}/unfollow` |
+| Mkeka wa leo (preview kwa wasiolipia) | `GET slips/preview` |
+| Mikeka ya single | `GET singles`, `GET singles/mine` |
+| Kulipia kifurushi / mkeka single | `POST orders/package`, `POST orders/single`, kisha `GET orders/status` kila sekunde 2 |
+| Kubadilisha namba / historia ya malipo | `POST me/phone`, `GET me/payments` |
+| Popups | `GET popups/win`, `GET popups/new-win`, `GET popups/warnings`, `POST popups/dismiss`, `POST warnings/{id}/read` |
+| Tipster tools | `GET/POST tipster/slips`, `POST tipster/slips/{id}`, `POST tipster/slips/{id}/delete` |
+| Kutoka | `POST auth/logout` |
+
+- Token inahifadhiwa kwenye `flutter_secure_storage` na kutumwa kama `Authorization: Bearer <token>` (pia `X-Auth-Token`).
+- Kila simu inapata `device_id` yake ya kudumu (inatengenezwa mara moja). Akaunti moja = simu moja: ukiingia kwenye simu nyingine, ya zamani inatolewa (`session_kicked`).
+- Muda wa vifurushi na mikeka unahesabiwa kwa saa ya **server** (`meta.server_time`), sio saa ya simu.
+- Kubadilisha anwani ya API: `AppConfig.API_BASE` juu ya `lib/main.dart`.
