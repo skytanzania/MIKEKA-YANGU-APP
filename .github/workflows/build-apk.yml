@@ -88,8 +88,12 @@ jobs:
       - name: Check which key signed the APK
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk
-          CERT=$(keytool -printcert -jarfile "$APK")
-          SHA=$(echo "$CERT" | grep -m1 'SHA256:' | sed 's/.*SHA256: *//')
+          # APKs with minSdk 24+ have no v1 (JAR) signature, so keytool can't
+          # read them; apksigner from the Android SDK can.
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          CERT=$("$APKSIGNER" verify --print-certs "$APK")
+          echo "$CERT"
+          SHA=$(echo "$CERT" | grep -m1 'SHA-256 digest:' | sed 's/.*SHA-256 digest: *//')
           if echo "$CERT" | grep -q "CN=Android Debug"; then
             echo "::warning title=APK signed with a throwaway debug key::Add the ANDROID_KEYSTORE_* secrets. Until then, UNINSTALL the old app before installing this APK, or Android will say 'App not installed'."
             {
