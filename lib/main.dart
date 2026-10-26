@@ -30,7 +30,13 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 // ============================================================
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AppConfig.initialize();
+  try {
+    await AppConfig.initialize();
+  } catch (e) {
+    // Never die on the launch screen: fall back to plain prefs and keep going.
+    debugPrint('AppConfig.initialize failed: $e');
+    await AppConfig.ensureFallback();
+  }
   ApiClient.onAuthError = handleAuthError;
   runApp(const MikekaApp());
 }
@@ -57,7 +63,9 @@ class AppConfig {
 
   static Future<void> initialize() async {
     secureStorage = const FlutterSecureStorage(
-      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      // resetOnError: if the stored data can't be decrypted (e.g. after a
+      // reinstall), wipe it instead of crashing on startup.
+      aOptions: AndroidOptions(encryptedSharedPreferences: true, resetOnError: true),
       iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
     );
     prefs = await SharedPreferences.getInstance();
@@ -84,6 +92,27 @@ class AppConfig {
     } catch (_) {}
 
     deviceId = await _loadDeviceId();
+  }
+
+  /// Minimal setup used only if [initialize] threw, so every `late` field is set.
+  static Future<void> ensureFallback() async {
+    secureStorage = const FlutterSecureStorage(
+      aOptions: AndroidOptions(encryptedSharedPreferences: true, resetOnError: true),
+    );
+    prefs = await SharedPreferences.getInstance();
+    deviceInfo = DeviceInfoPlugin();
+    notifications = FlutterLocalNotificationsPlugin();
+    if (deviceId == null) {
+      const key = 'mikeka_device_id';
+      var id = prefs.getString(key);
+      if (id == null || id.isEmpty) {
+        final rnd = Random.secure();
+        final hex = List.generate(16, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+        id = 'app-$platform-$hex';
+        await prefs.setString(key, id);
+      }
+      deviceId = id;
+    }
   }
 
   static Future<String> _loadDeviceId() async {

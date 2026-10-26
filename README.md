@@ -43,6 +43,11 @@ flutter build apk --release
   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
   Kama secrets hazipo, APK bado inajengwa lakini AAB inarukwa.
 - ⚠️ Usiweke keystore (`.jks`) wala `android/key.properties` kwenye repo hii — ni ya umma (public).
+- 📲 **"App not installed" kwenye simu?** Android inakubali update tu kama APK mpya imesainiwa kwa key ileile ya APK iliyopo kwenye simu.
+  Bila secrets, kila build inasainiwa kwa debug key mpya ya bahati nasibu → simu inakataa. Suluhisho:
+  1. Weka secrets 4 za `ANDROID_*` hapo juu (key moja ya kudumu kwa builds zote).
+  2. Kwenye simu, **ondoa (uninstall) MIKEKA APP ya zamani mara moja**, kisha sakinisha APK mpya. Builds zinazofuata zitajisasisha bila kuondoa.
+  - Ukurasa wa kila run (Summary) unaonyesha kama APK imesainiwa kwa key ya kudumu au debug key.
 - Version code inaongezeka yenyewe kila build (`github.run_number`); badilisha version name kwenye `pubspec.yaml`.
 - Flutter imefungwa kwenye toleo **3.38.10** (Gradle 8.14, AGP 8.11.1, Kotlin 2.2.20). Folda ya `android/` imetengenezwa kwa toleo hilo — usiifute wala kuitengeneza upya kwa `flutter create`.
 - Ukitaka kupandisha Flutter, pandisha pia plugins (`flutter_local_notifications`, `device_info_plus`) na matoleo ya Gradle kwenye `android/settings.gradle.kts` kwa pamoja.
