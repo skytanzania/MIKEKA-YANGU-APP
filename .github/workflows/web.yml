@@ -66,10 +66,10 @@ jobs:
           flutter build web --release --base-href "/${REPO_NAME}/"
           cp build/web/index.html build/web/404.html
 
+      # One-time setup: Settings → Pages → Source: "GitHub Actions".
+      # (A workflow is not allowed to switch Pages on by itself.)
       - name: Set up GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Upload Pages site
         uses: actions/upload-pages-artifact@v3
