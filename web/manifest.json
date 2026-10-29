@@ -1,0 +1,18 @@
+{
+  "name": "MIKEKA APP - Mikeka ya Leo Tanzania",
+  "short_name": "MIKEKA",
+  "description": "Mikeka ya leo kutoka kwa tipsters bora Tanzania, vifurushi vya VIP na single slips.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000010",
+  "theme_color": "#000010",
+  "lang": "sw",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icons/Icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/Icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/Icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

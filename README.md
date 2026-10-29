@@ -52,6 +52,17 @@ flutter build apk --release
 - Flutter imefungwa kwenye toleo **3.38.10** (Gradle 8.14, AGP 8.11.1, Kotlin 2.2.20). Folda ya `android/` imetengenezwa kwa toleo hilo — usiifute wala kuitengeneza upya kwa `flutter create`.
 - Ukitaka kupandisha Flutter, pandisha pia plugins (`flutter_local_notifications`, `device_info_plus`) na matoleo ya Gradle kwenye `android/settings.gradle.kts` kwa pamoja.
 
+### 🌐 Web App (bure)
+
+Toleo la web linajengwa kutoka `lib/main.dart` ileile (`.github/workflows/web.yml`) kila `push` kwenye `main`:
+
+- **GitHub Pages (bure):** https://skytanzania.github.io/MIKEKA-YANGU-APP/
+  (mara ya kwanza: **Settings → Pages → Source: GitHub Actions**).
+- **cPanel (mikekaapp.co.tz/app/):** Actions → run → Artifacts → `mikeka-web-cpanel` → fungua zip ndani ya `public_html/app/`.
+  Hapa hakuna haja ya CORS kwa sababu web app na `api.php` ziko kwenye domain moja.
+- Ukitumia GitHub Pages, `api.php` lazima iruhusu CORS kwa `https://skytanzania.github.io`.
+- Watumiaji wanaweza "Add to Home Screen" (PWA) kwenye Android, iPhone na kompyuta.
+
 ---
 
 ## ✨ Vipengele Muhimu Vilivyojumuishwa (Features Included)

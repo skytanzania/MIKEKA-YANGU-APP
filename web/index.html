@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+  <!-- Replaced by `flutter build web --base-href ...` -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MIKEKA APP - Mikeka ya Leo Tanzania</title>
+  <meta name="description" content="MIKEKA APP — mikeka ya leo, tipsters bora Tanzania, vifurushi vya VIP na single slips. Bure kwenye simu na kompyuta.">
+  <meta name="theme-color" content="#000010">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MIKEKA">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+
+  <meta property="og:title" content="MIKEKA APP - Mikeka ya Leo Tanzania">
+  <meta property="og:description" content="Mikeka ya leo kutoka kwa tipsters bora Tanzania.">
+  <meta property="og:type" content="website">
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #000010; }
+    /* Skeleton shown while the app downloads; removed on Flutter's first frame. */
+    #boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 14px; font-family: Roboto, system-ui, sans-serif;
+            transition: opacity .3s ease; }
+    #boot img { width: 84px; height: 84px; border-radius: 20px; }
+    #boot h1 { margin: 6px 0 0; color: #00FFC8; font-size: 24px; font-weight: 900; letter-spacing: 3px; }
+    #boot p { margin: 0; color: #8899AA; font-size: 13px; }
+    .bar { width: 160px; height: 8px; border-radius: 4px; background: #1A1A2E; overflow: hidden; position: relative; }
+    .bar.short { width: 100px; }
+    .bar::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+                  background: linear-gradient(90deg, transparent, #2A2A44, transparent);
+                  animation: shimmer 1.4s infinite; }
+    @keyframes shimmer { to { transform: translateX(100%); } }
+  </style>
+</head>
+<body>
+  <div id="boot">
+    <img src="icons/Icon-192.png" alt="">
+    <h1>MIKEKA APP</h1>
+    <p>Mikeka ya Leo Tanzania</p>
+    <div style="height:22px"></div>
+    <div class="bar"></div>
+    <div class="bar short"></div>
+  </div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var b = document.getElementById('boot');
+      if (!b) return;
+      b.style.opacity = '0';
+      setTimeout(function () { b.remove(); }, 300);
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

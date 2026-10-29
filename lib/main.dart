@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' show ImageFilter;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -72,17 +73,24 @@ class AppConfig {
     );
     prefs = await SharedPreferences.getInstance();
     deviceInfo = DeviceInfoPlugin();
-    notifications = FlutterLocalNotificationsPlugin();
+    if (!kIsWeb) notifications = FlutterLocalNotificationsPlugin();
+
+    if (!kIsWeb) {
+      // Local notifications have no browser implementation.
+      try {
+        const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+        const iosInit = DarwinInitializationSettings();
+        const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+        await notifications.initialize(initSettings);
+      } catch (_) {}
+    }
 
     try {
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const iosInit = DarwinInitializationSettings();
-      const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
-      await notifications.initialize(initSettings);
-    } catch (_) {}
-
-    try {
-      if (Platform.isAndroid) {
+      if (kIsWeb) {
+        platform = 'web';
+        final info = await deviceInfo.webBrowserInfo;
+        deviceModel = 'Web ${info.browserName.name}';
+      } else if (Platform.isAndroid) {
         platform = 'android';
         final info = await deviceInfo.androidInfo;
         deviceModel = '${info.manufacturer} ${info.model}';
@@ -103,7 +111,7 @@ class AppConfig {
     );
     prefs = await SharedPreferences.getInstance();
     deviceInfo = DeviceInfoPlugin();
-    notifications = FlutterLocalNotificationsPlugin();
+    if (!kIsWeb) notifications = FlutterLocalNotificationsPlugin();
     if (deviceId == null) {
       const key = 'mikeka_device_id';
       var id = prefs.getString(key);
@@ -382,9 +390,10 @@ class ApiClient {
       'Content-Type': 'application/json',
       'X-Device-Id': AppConfig.deviceId ?? '',
       'X-App-Version': AppConfig.VERSION,
-      // Some shared-hosting firewalls block the default "Dart/x.y" agent.
-      'User-Agent': 'Mozilla/5.0 (Linux; Android) MikekaApp/${AppConfig.VERSION}',
     };
+    // Some shared-hosting firewalls block the default "Dart/x.y" agent.
+    // (Browsers send their own User-Agent and refuse to change it.)
+    if (!kIsWeb) h['User-Agent'] = 'Mozilla/5.0 (Linux; Android) MikekaApp/${AppConfig.VERSION}';
     final token = await getToken();
     if (token != null && token.isNotEmpty) {
       h['Authorization'] = 'Bearer $token';
@@ -1416,7 +1425,7 @@ Widget _avatar(String? url, String name, double size, {Color textColor = AppColo
     ),
     child: ClipOval(
       child: (url != null && url.startsWith('http'))
-          ? Image.network(
+          ? _netImage(
               url,
               fit: BoxFit.cover,
               loadingBuilder: _imageSkeleton,
@@ -1887,7 +1896,7 @@ class _HeroSliderState extends State<HeroSlider> {
           children: [
             gradientBg,
             if (s.image != null)
-              Image.network(
+              _netImage(
                 s.image!,
                 fit: BoxFit.cover,
                 loadingBuilder: _imageSkeleton,
@@ -3733,7 +3742,7 @@ class BetslipCard extends StatelessWidget {
                       color: Colors.white.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Image.network(
+                    child: _netImage(
                       companyLogo,
                       fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) => const SizedBox.shrink(),
@@ -3904,6 +3913,29 @@ class BetslipCard extends StatelessWidget {
 // ============================================================
 // SLIP IMAGE (blurred + locked for unpaid users, clear for paid)
 // ============================================================
+/// Image.network that also works on the web version when the image host
+/// sends no CORS headers (falls back to a plain <img> element).
+Widget _netImage(
+  String url, {
+  double? width,
+  double? height,
+  BoxFit? fit,
+  AlignmentGeometry alignment = Alignment.center,
+  ImageLoadingBuilder? loadingBuilder,
+  ImageErrorWidgetBuilder? errorBuilder,
+}) {
+  return Image.network(
+    url,
+    width: width,
+    height: height,
+    fit: fit,
+    alignment: alignment,
+    loadingBuilder: loadingBuilder,
+    errorBuilder: errorBuilder,
+    webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+  );
+}
+
 String? _absUrl(String? url) {
   if (url == null || url.trim().isEmpty) return null;
   final u = url.trim();
@@ -3926,9 +3958,9 @@ class SlipImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final img = url == null
+    final img = url == null || (locked && kIsWeb)
         ? _fakeSlip()
-        : Image.network(
+        : _netImage(
             url!,
             width: double.infinity,
             height: height,
@@ -4060,7 +4092,7 @@ class _SlipImageViewer extends StatelessWidget {
         minScale: 1,
         maxScale: 5,
         child: Center(
-          child: Image.network(
+          child: _netImage(
             url,
             fit: BoxFit.contain,
             loadingBuilder: (c, child, p) => p == null ? child : Shimmer(child: _bone(width: 260, height: 420)),
@@ -4122,7 +4154,7 @@ class SingleSlipCard extends StatelessWidget {
           Row(
             children: [
               if (companyLogo != null) ...[
-                Image.network(companyLogo,
+                _netImage(companyLogo,
                     width: 22, height: 22, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
                 const SizedBox(width: 6),
               ],
@@ -5221,6 +5253,15 @@ void _showSnack(BuildContext context, String message, {bool isError = false}) {
 Future<void> _openUrl(BuildContext context, String url, {String? title}) async {
   final uri = Uri.tryParse(url.trim());
   if (uri == null) return;
+  if (kIsWeb) {
+    // Web version: a browser tab is the in-app browser.
+    try {
+      await launchUrl(uri, webOnlyWindowName: uri.scheme.startsWith('http') ? '_blank' : '_self');
+    } catch (_) {
+      if (context.mounted) _showSnack(context, 'Imeshindikana kufungua link.', isError: true);
+    }
+    return;
+  }
   if (uri.scheme == 'http' || uri.scheme == 'https') {
     await Navigator.push(
       context,

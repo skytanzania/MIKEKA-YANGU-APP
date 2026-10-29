@@ -1,0 +1,89 @@
+name: Build & Publish Mikeka Web App
+
+# Builds the web version of the Flutter app (same lib/main.dart as the APK).
+#  1. Publishes it free on GitHub Pages:
+#       https://skytanzania.github.io/MIKEKA-YANGU-APP/
+#  2. Uploads a zip for cPanel (folder public_html/app → https://mikekaapp.co.tz/app/).
+#     Hosting it on mikekaapp.co.tz means the browser needs no CORS for api.php.
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build web app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Same Flutter version as the APK workflow.
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.38.10'
+          cache: true
+
+      - name: Get Flutter Packages
+        run: flutter pub get
+
+      - name: Build for cPanel (mikekaapp.co.tz/app/)
+        run: |
+          flutter build web --release --base-href /app/
+          cat > build/web/.htaccess <<'EOF'
+          AddType application/wasm .wasm
+          AddType application/manifest+json .webmanifest
+          <FilesMatch "(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js|manifest\.json)$">
+            Header set Cache-Control "no-cache, must-revalidate"
+          </FilesMatch>
+          EOF
+          sed -i 's/^          //' build/web/.htaccess
+          (cd build/web && zip -qr ../../mikeka-web-cpanel.zip .)
+
+      - name: Upload cPanel zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: mikeka-web-cpanel
+          path: mikeka-web-cpanel.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build for GitHub Pages
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          flutter build web --release --base-href "/${REPO_NAME}/"
+          cp build/web/index.html build/web/404.html
+
+      - name: Set up GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
