@@ -380,6 +380,8 @@ class ApiClient {
       'Content-Type': 'application/json',
       'X-Device-Id': AppConfig.deviceId ?? '',
       'X-App-Version': AppConfig.VERSION,
+      // Some shared-hosting firewalls block the default "Dart/x.y" agent.
+      'User-Agent': 'Mozilla/5.0 (Linux; Android) MikekaApp/${AppConfig.VERSION}',
     };
     final token = await getToken();
     if (token != null && token.isNotEmpty) {
@@ -427,7 +429,18 @@ class ApiClient {
         body?.forEach((k, v) {
           if (v != null) clean[k] = v;
         });
-        res = await http.post(uri, headers: headers, body: jsonEncode(clean)).timeout(_timeout);
+        final payload = jsonEncode(clean);
+        res = await http.post(uri, headers: headers, body: payload).timeout(_timeout);
+        // package:http does not follow redirects for POST. If the host
+        // redirects (http→https, non-www→www, …) re-send the same POST to the
+        // new address instead of reading the redirect page as the answer.
+        var target = uri;
+        for (var hop = 0; hop < 3 && const [301, 302, 303, 307, 308].contains(res.statusCode); hop++) {
+          final loc = res.headers['location'];
+          if (loc == null || loc.isEmpty) break;
+          target = target.resolve(loc);
+          res = await http.post(target, headers: headers, body: payload).timeout(_timeout);
+        }
       }
     } on TimeoutException {
       return ApiResponse.network('Mtandao unachelewa. Jaribu tena.');
@@ -464,17 +477,18 @@ class ApiResponse {
       ApiResponse(success: false, statusCode: 0, errorCode: 'network', error: message);
 
   factory ApiResponse.fromHttp(http.Response res) {
-    Map<String, dynamic> json;
-    try {
-      final decoded = jsonDecode(utf8.decode(res.bodyBytes));
-      if (decoded is! Map) throw const FormatException('not an object');
-      json = Map<String, dynamic>.from(decoded);
-    } catch (_) {
+    final json = _decodeLenient(utf8.decode(res.bodyBytes, allowMalformed: true));
+    if (json == null) {
+      final body = utf8.decode(res.bodyBytes, allowMalformed: true);
+      debugPrint('API bad response HTTP ${res.statusCode}: '
+          '${body.length > 300 ? body.substring(0, 300) : body}');
       return ApiResponse(
         success: false,
         statusCode: res.statusCode,
         errorCode: 'bad_response',
-        error: 'Jibu la seva si sahihi. Jaribu tena.',
+        // The HTTP code tells us where to look (403 = firewall, 500 = PHP error,
+        // 301/302 = redirect, 200 = PHP printed something that isn't JSON).
+        error: 'Jibu la seva si sahihi (HTTP ${res.statusCode}). Jaribu tena.',
       );
     }
 
@@ -502,6 +516,36 @@ class ApiResponse {
       error: e['message']?.toString() ?? 'Hitilafu. Jaribu tena.',
       errorInfo: e,
     );
+  }
+
+  /// Parses the API JSON even when PHP printed a BOM, a warning or a notice
+  /// around it (common on shared hosting after a PHP upgrade).
+  static Map<String, dynamic>? _decodeLenient(String body) {
+    Map<String, dynamic>? tryObj(String s) {
+      try {
+        final d = jsonDecode(s);
+        return d is Map ? Map<String, dynamic>.from(d) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    var s = body.trim();
+    if (s.startsWith('﻿')) s = s.substring(1).trim();
+    final direct = tryObj(s);
+    if (direct != null) return direct;
+
+    // Look for the API envelope {"success": ...} inside the extra output.
+    final end = s.lastIndexOf('}');
+    if (end < 0) return null;
+    var start = s.indexOf('{"success"');
+    if (start < 0) start = s.indexOf('{');
+    while (start >= 0 && start < end) {
+      final obj = tryObj(s.substring(start, end + 1));
+      if (obj != null && obj.containsKey('success')) return obj;
+      start = s.indexOf('{', start + 1);
+    }
+    return null;
   }
 
   dynamic operator [](String key) => data[key];
