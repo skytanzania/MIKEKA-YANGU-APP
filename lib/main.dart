@@ -19,6 +19,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -47,7 +48,7 @@ void main() async {
 class AppConfig {
   static const String API_BASE = 'https://mikekaapp.co.tz/api.php';
   static const String APP_NAME = 'MIKEKA APP';
-  static const String VERSION = '1.1.0';
+  static const String VERSION = '1.2.0';
   static const String DEFAULT_WASHINDI_URL = 'https://odds-mikeka.mikekaapp.co.tz/users.php';
   static const String SUPPORT_EMAIL = 'admin@mikekaapp.co.tz';
 
@@ -695,6 +696,7 @@ class AppState extends ChangeNotifier {
   List<PackageInfo> packages = List<PackageInfo>.from(PackageInfo.defaults);
   List<NetworkInfo> networks = List<NetworkInfo>.from(NetworkInfo.defaults);
   List<Map<String, dynamic>> companies = [];
+  List<HeroSlide> heroSlides = [];
   String washindiUrl = AppConfig.DEFAULT_WASHINDI_URL;
   String supportEmail = AppConfig.SUPPORT_EMAIL;
   String pinSafetyNotice =
@@ -742,6 +744,8 @@ class AppState extends ChangeNotifier {
           .toList();
     }
     companies = _list(c['companies']);
+    final slides = HeroSlide.parse(c);
+    if (slides.isNotEmpty) heroSlides = slides;
     final links = _map(c['links']);
     washindiUrl = _str(links['washindi_page']) ?? washindiUrl;
     supportEmail = _str(c['support_email']) ?? supportEmail;
@@ -953,13 +957,26 @@ class _SplashScreenState extends State<SplashScreen> {
                 style: TextStyle(color: AppColors.muted, fontSize: 13),
               ),
               SizedBox(height: 40),
-              CircularProgressIndicator(color: AppColors.accent),
+              Shimmer(
+                child: Column(children: [
+                  _SplashBar(width: 160),
+                  SizedBox(height: 8),
+                  _SplashBar(width: 100),
+                ]),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class _SplashBar extends StatelessWidget {
+  final double width;
+  const _SplashBar({required this.width});
+  @override
+  Widget build(BuildContext context) => _bone(width: width, height: 8, radius: 4);
 }
 
 // ============================================================
@@ -1401,6 +1418,7 @@ Widget _avatar(String? url, String name, double size, {Color textColor = AppColo
           ? Image.network(
               url,
               fit: BoxFit.cover,
+              loadingBuilder: _imageSkeleton,
               errorBuilder: (_, __, ___) => Container(
                 color: AppColors.card2,
                 alignment: Alignment.center,
@@ -1422,6 +1440,676 @@ Widget _verifiedTick(double size) {
     ),
     child: Icon(Icons.check, size: size, color: Colors.white),
   );
+}
+
+// ============================================================
+// SKELETON LOADING (shimmer placeholders used across the app)
+// ============================================================
+/// Sweeps a light band across every [_bone] inside [child].
+class Shimmer extends StatefulWidget {
+  final Widget child;
+  const Shimmer({super.key, required this.child});
+  @override
+  State<Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<Shimmer> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) => ShaderMask(
+        blendMode: BlendMode.srcATop,
+        shaderCallback: (rect) => LinearGradient(
+          colors: const [AppColors.card2, Color(0xFF2A2A44), AppColors.card2],
+          stops: const [0.1, 0.3, 0.4],
+          begin: const Alignment(-1.0, -0.3),
+          end: const Alignment(1.0, 0.3),
+          transform: _SlideGradient(_c.value * 3 - 1.5),
+        ).createShader(rect),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _SlideGradient extends GradientTransform {
+  final double percent;
+  const _SlideGradient(this.percent);
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.translationValues(bounds.width * percent, 0, 0);
+}
+
+/// One grey placeholder block.
+Widget _bone({double? width, double height = 12, double radius = 8, bool circle = false}) {
+  return Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: AppColors.card2,
+      shape: circle ? BoxShape.circle : BoxShape.rectangle,
+      borderRadius: circle ? null : BorderRadius.circular(radius),
+    ),
+  );
+}
+
+Widget _skeletonFrame({required Widget child, EdgeInsets padding = const EdgeInsets.all(12)}) {
+  return Container(
+    padding: padding,
+    decoration: BoxDecoration(
+      color: AppColors.card,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: child,
+  );
+}
+
+Widget _skeletonTipsterCard() {
+  return _skeletonFrame(
+    child: Column(
+      children: [
+        _bone(width: 64, height: 64, circle: true),
+        const SizedBox(height: 10),
+        _bone(width: 90, height: 12),
+        const SizedBox(height: 6),
+        _bone(width: 50, height: 10),
+        const SizedBox(height: 10),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+          _bone(width: 44, height: 14, radius: 10),
+          _bone(width: 44, height: 14, radius: 10),
+        ]),
+        const SizedBox(height: 8),
+        _bone(width: 70, height: 9),
+        const Spacer(),
+        _bone(width: double.infinity, height: 32, radius: 12),
+      ],
+    ),
+  );
+}
+
+Widget _skeletonSlipCard() {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: _skeletonFrame(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            _bone(width: 32, height: 32, circle: true),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _bone(width: 120, height: 12),
+                const SizedBox(height: 6),
+                _bone(width: 70, height: 9),
+              ]),
+            ),
+            _bone(width: 56, height: 20, radius: 10),
+          ]),
+          const SizedBox(height: 14),
+          _bone(width: double.infinity, height: 12),
+          const SizedBox(height: 8),
+          _bone(width: 200, height: 12),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(child: _bone(height: 40, radius: 12)),
+            const SizedBox(width: 10),
+            _bone(width: 90, height: 40, radius: 12),
+          ]),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _skeletonListTile() {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+    child: Row(children: [
+      _bone(width: 28, height: 28, circle: true),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _bone(width: 110, height: 12),
+          const SizedBox(height: 6),
+          _bone(width: 160, height: 9),
+        ]),
+      ),
+      _bone(width: 60, height: 10),
+    ]),
+  );
+}
+
+/// Home (Tipsters tab) while loading: slider, filter chips, tipster grid.
+Widget skeletonHome() {
+  return Shimmer(
+    child: ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      children: [
+        _bone(width: double.infinity, height: 170, radius: 18),
+        const SizedBox(height: 10),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          for (var i = 0; i < 3; i++)
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 3), child: _bone(width: i == 0 ? 18 : 7, height: 7)),
+        ]),
+        const SizedBox(height: 16),
+        _bone(width: 110, height: 14),
+        const SizedBox(height: 14),
+        Row(children: [_bone(width: 86, height: 32, radius: 16), const SizedBox(width: 8), _bone(width: 120, height: 32, radius: 16)]),
+        const SizedBox(height: 12),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          childAspectRatio: 0.62,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          children: List.generate(4, (_) => _skeletonTipsterCard()),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Lists of slips (Mikeka, Single, tipster's own slips).
+Widget skeletonSlipList({int count = 4, bool withHeader = true}) {
+  return Shimmer(
+    child: ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(12),
+      children: [
+        if (withHeader) ...[
+          _bone(width: double.infinity, height: 80, radius: 16),
+          const SizedBox(height: 16),
+          _bone(width: 140, height: 14),
+          const SizedBox(height: 14),
+        ],
+        for (var i = 0; i < count; i++) _skeletonSlipCard(),
+      ],
+    ),
+  );
+}
+
+/// Tipster profile page.
+Widget skeletonProfile() {
+  return Shimmer(
+    child: ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Center(child: _bone(width: 96, height: 96, circle: true)),
+        const SizedBox(height: 14),
+        Center(child: _bone(width: 150, height: 16)),
+        const SizedBox(height: 8),
+        Center(child: _bone(width: 90, height: 11)),
+        const SizedBox(height: 18),
+        Row(children: [
+          for (var i = 0; i < 3; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            Expanded(child: _bone(height: 58, radius: 14)),
+          ],
+        ]),
+        const SizedBox(height: 16),
+        _bone(width: double.infinity, height: 44, radius: 12),
+        const SizedBox(height: 20),
+        _bone(width: 130, height: 14),
+        const SizedBox(height: 14),
+        _skeletonSlipCard(),
+        _skeletonSlipCard(),
+      ],
+    ),
+  );
+}
+
+/// Plain rows (payments history etc.).
+Widget skeletonRows({int count = 6}) {
+  return Shimmer(
+    child: Column(children: List.generate(count, (_) => _skeletonListTile())),
+  );
+}
+
+/// Image.network loadingBuilder that shows a shimmer block until the image arrives.
+Widget _imageSkeleton(BuildContext context, Widget child, ImageChunkEvent? progress) {
+  if (progress == null) return child;
+  return Shimmer(child: _bone(width: double.infinity, height: double.infinity, radius: 0));
+}
+
+// ============================================================
+// HERO SLIDER (sliding images at the top of the home tab)
+// ============================================================
+class HeroSlide {
+  final String? image;
+  final String title;
+  final String? subtitle;
+  final String? link; // https://… opens in the in-app browser; app://packages opens packages
+  final List<Color> colors;
+
+  const HeroSlide({this.image, required this.title, this.subtitle, this.link, required this.colors});
+
+  static String? _absolute(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('http')) return url;
+    return Uri.parse(AppConfig.API_BASE).resolve(url).toString();
+  }
+
+  static const _palettes = [
+    [Color(0xFF003B36), Color(0xFF000010)],
+    [Color(0xFF2A1060), Color(0xFF000010)],
+    [Color(0xFF4A3300), Color(0xFF000010)],
+    [Color(0xFF00284A), Color(0xFF000010)],
+  ];
+
+  /// Accepts the slide list from GET config or GET home under any of the
+  /// usual key names, so it keeps working if the API names change.
+  static List<HeroSlide> parse(Map<String, dynamic> data) {
+    dynamic raw;
+    for (final k in ['hero_slides', 'slides', 'hero', 'banners', 'sliders', 'slider']) {
+      if (data[k] is List) {
+        raw = data[k];
+        break;
+      }
+      if (data[k] is Map && _map(data[k])['items'] is List) {
+        raw = _map(data[k])['items'];
+        break;
+      }
+    }
+    final out = <HeroSlide>[];
+    for (final s in _list(raw)) {
+      if (s.containsKey('is_active') && !_asBool(s['is_active'])) continue;
+      final image = _absolute(_str(s['image_url']) ?? _str(s['image']) ?? _str(s['img']) ?? _str(s['banner']) ?? _str(s['photo']));
+      final title = _str(s['title']) ?? _str(s['heading']) ?? _str(s['name']) ?? '';
+      if (image == null && title.isEmpty) continue;
+      out.add(HeroSlide(
+        image: image,
+        title: title,
+        subtitle: _str(s['subtitle']) ?? _str(s['description']) ?? _str(s['text']) ?? _str(s['caption']),
+        link: _str(s['link_url']) ?? _str(s['link']) ?? _str(s['target_url']) ?? _str(s['url']) ?? _str(s['action_url']),
+        colors: _palettes[out.length % _palettes.length],
+      ));
+    }
+    return out;
+  }
+
+  /// Shown when the server has no slides yet, so the slider is never empty.
+  static List<HeroSlide> defaults() {
+    final prices = AppState.I.packages.map((p) => p.price).where((p) => p > 0).toList()..sort();
+    final from = prices.isEmpty ? '' : ' kuanzia TSh ${_formatMoney(prices.first)}';
+    return [
+      HeroSlide(
+        title: 'MIKEKA YA LEO 🔥',
+        subtitle: 'Mikeka mipya kila siku kutoka kwa tipsters bora Tanzania',
+        link: 'app://packages',
+        colors: _palettes[0],
+      ),
+      HeroSlide(
+        title: 'VIFURUSHI VYA VIP 💎',
+        subtitle: 'Fungua booking codes zote$from',
+        link: 'app://packages',
+        colors: _palettes[1],
+      ),
+      HeroSlide(
+        title: 'WASHINDI WA LEO 🏆',
+        subtitle: 'Angalia mikeka iliyoshinda leo',
+        link: AppState.I.washindiUrl,
+        colors: _palettes[2],
+      ),
+    ];
+  }
+}
+
+class HeroSlider extends StatefulWidget {
+  final List<HeroSlide> slides;
+  final double height;
+  const HeroSlider({super.key, required this.slides, this.height = 170});
+  @override
+  State<HeroSlider> createState() => _HeroSliderState();
+}
+
+class _HeroSliderState extends State<HeroSlider> {
+  final PageController _pc = PageController(viewportFraction: 0.92);
+  Timer? _timer;
+  int _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startAuto();
+  }
+
+  @override
+  void didUpdateWidget(covariant HeroSlider old) {
+    super.didUpdateWidget(old);
+    if (_page >= widget.slides.length) _page = 0;
+    _startAuto();
+  }
+
+  void _startAuto() {
+    _timer?.cancel();
+    if (widget.slides.length < 2) return;
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_pc.hasClients) return;
+      final next = (_page + 1) % widget.slides.length;
+      _pc.animateToPage(next, duration: const Duration(milliseconds: 550), curve: Curves.easeOutCubic);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pc.dispose();
+    super.dispose();
+  }
+
+  Future<void> _tap(HeroSlide s) async {
+    final link = s.link;
+    if (link == null || link.isEmpty) return;
+    if (link == 'app://packages') {
+      await startPackagePurchase(context);
+    } else {
+      await _openUrl(context, link, title: s.title);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slides = widget.slides;
+    if (slides.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        SizedBox(
+          height: widget.height,
+          child: NotificationListener<ScrollNotification>(
+            // Pause auto-sliding while the user swipes, restart after.
+            onNotification: (n) {
+              if (n is ScrollStartNotification && n.dragDetails != null) _timer?.cancel();
+              if (n is ScrollEndNotification) _startAuto();
+              return false;
+            },
+            child: PageView.builder(
+              controller: _pc,
+              itemCount: slides.length,
+              onPageChanged: (i) => setState(() => _page = i),
+              itemBuilder: (_, i) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: _slide(slides[i]),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(slides.length, (i) {
+            final active = i == _page;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: active ? 18 : 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: active ? AppColors.accent : Colors.white24,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _slide(HeroSlide s) {
+    final gradientBg = Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: s.colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+      ),
+    );
+    return GestureDetector(
+      onTap: () => _tap(s),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            gradientBg,
+            if (s.image != null)
+              Image.network(
+                s.image!,
+                fit: BoxFit.cover,
+                loadingBuilder: _imageSkeleton,
+                errorBuilder: (_, __, ___) => gradientBg,
+              )
+            else
+              Positioned(
+                right: -20,
+                bottom: -20,
+                child: Icon(Icons.casino, size: 150, color: Colors.white.withOpacity(0.06)),
+              ),
+            if (s.title.isNotEmpty || s.subtitle != null)
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.transparent, Color(0xCC000010)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0.35, 1],
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 14,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (s.title.isNotEmpty)
+                    Text(s.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  if (s.subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(s.subtitle!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                  if (s.link != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
+                      child: const Text('FUNGUA',
+                          style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// IN-APP BROWSER (web links open inside MIKEKA APP)
+// ============================================================
+class InAppBrowserScreen extends StatefulWidget {
+  final String url;
+  final String? title;
+  const InAppBrowserScreen({super.key, required this.url, this.title});
+  @override
+  State<InAppBrowserScreen> createState() => _InAppBrowserScreenState();
+}
+
+class _InAppBrowserScreenState extends State<InAppBrowserScreen> {
+  late final WebViewController _web;
+  int _progress = 0;
+  bool _firstLoadDone = false;
+  String? _pageTitle;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _web = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(AppColors.bg)
+      ..setNavigationDelegate(NavigationDelegate(
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+        onPageStarted: (_) {
+          if (mounted) setState(() => _error = null);
+        },
+        onPageFinished: (_) async {
+          final t = await _web.getTitle();
+          if (!mounted) return;
+          setState(() {
+            _firstLoadDone = true;
+            _progress = 100;
+            if (t != null && t.trim().isNotEmpty) _pageTitle = t.trim();
+          });
+        },
+        onWebResourceError: (e) {
+          if (e.isForMainFrame == false || !mounted) return;
+          setState(() {
+            _firstLoadDone = true;
+            _error = 'Imeshindikana kufungua ukurasa. Angalia internet.';
+          });
+        },
+        onNavigationRequest: (req) {
+          final u = Uri.tryParse(req.url);
+          if (u == null) return NavigationDecision.prevent;
+          if (const ['http', 'https', 'about', 'data', 'blob', 'javascript'].contains(u.scheme)) {
+            return NavigationDecision.navigate;
+          }
+          // tel:, mailto:, whatsapp:, intent:… need the phone's own app.
+          _launchOutside(u);
+          return NavigationDecision.prevent;
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  Future<void> _launchOutside(Uri u) async {
+    try {
+      if (u.scheme == 'intent') {
+        final fallback = RegExp(r'S\.browser_fallback_url=([^;]+)').firstMatch(u.toString())?.group(1);
+        if (fallback != null) {
+          await _web.loadRequest(Uri.parse(Uri.decodeComponent(fallback)));
+          return;
+        }
+      }
+      await launchUrl(u, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) _showSnack(context, 'Imeshindikana kufungua link.', isError: true);
+    }
+  }
+
+  Future<void> _back() async {
+    if (await _web.canGoBack()) {
+      await _web.goBack();
+    } else if (mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final host = Uri.tryParse(widget.url)?.host ?? '';
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+          centerTitle: false,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _pageTitle ?? widget.title ?? host,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.text, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0),
+              ),
+              Row(children: [
+                const Icon(Icons.lock, size: 10, color: AppColors.success),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(host,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppColors.muted, fontSize: 10, letterSpacing: 0)),
+                ),
+              ]),
+            ],
+          ),
+          actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => _web.reload())],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(2),
+            child: _firstLoadDone && _progress < 100
+                ? LinearProgressIndicator(
+                    value: _progress / 100, minHeight: 2, color: AppColors.accent, backgroundColor: Colors.transparent)
+                : const SizedBox(height: 2),
+          ),
+        ),
+        body: Stack(
+          children: [
+            WebViewWidget(controller: _web),
+            if (!_firstLoadDone) Positioned.fill(child: Container(color: AppColors.bg, child: _pageSkeleton())),
+            if (_error != null)
+              Positioned.fill(
+                child: Container(color: AppColors.bg, child: _errorState(_error!, () => _web.reload())),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pageSkeleton() {
+    return Shimmer(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          _bone(width: double.infinity, height: 150, radius: 14),
+          const SizedBox(height: 18),
+          _bone(width: 200, height: 16),
+          const SizedBox(height: 12),
+          for (var i = 0; i < 4; i++) ...[
+            _bone(width: double.infinity, height: 11),
+            const SizedBox(height: 8),
+          ],
+          _bone(width: 160, height: 11),
+          const SizedBox(height: 20),
+          for (var i = 0; i < 3; i++) _skeletonListTile(),
+        ],
+      ),
+    );
+  }
 }
 
 // ============================================================
@@ -1448,20 +2136,32 @@ class _TipstersTabState extends State<TipstersTab> with ReloadOnLogin<TipstersTa
   @override
   Future<void> reload() async {
     setState(() {
-      loading = true;
+      // Skeleton only on the first load; pull-to-refresh keeps the content.
+      loading = tipsters.isEmpty;
       error = null;
     });
-    final res = await ApiClient.get('tipsters');
+    final results = await Future.wait([ApiClient.get('tipsters'), ApiClient.get('home')]);
     if (!mounted) return;
+    final res = results[0];
+    final home = results[1];
     setState(() {
+      if (home.success) {
+        final fromHome = HeroSlide.parse(home.data);
+        if (fromHome.isNotEmpty) AppState.I.heroSlides = fromHome;
+      }
       if (res.success) {
         tipsters = _list(res['tipsters']);
+      } else if (home.success && _list(home['tipsters']).isNotEmpty) {
+        tipsters = _list(home['tipsters']);
       } else {
         error = res.error;
       }
       loading = false;
     });
   }
+
+  List<HeroSlide> get _slides =>
+      AppState.I.heroSlides.isNotEmpty ? AppState.I.heroSlides : HeroSlide.defaults();
 
   Future<void> _toggleFollow(Map<String, dynamic> t) async {
     if (!AppState.I.loggedIn) {
@@ -1491,11 +2191,11 @@ class _TipstersTabState extends State<TipstersTab> with ReloadOnLogin<TipstersTa
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TIPSTERS'),
+        title: const Text('MIKEKA APP'),
         actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: reload)],
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          ? skeletonHome()
           : RefreshIndicator(
               color: AppColors.accent,
               backgroundColor: AppColors.card,
@@ -1506,7 +2206,19 @@ class _TipstersTabState extends State<TipstersTab> with ReloadOnLogin<TipstersTa
                       slivers: [
                         SliverToBoxAdapter(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                            padding: const EdgeInsets.only(top: 10),
+                            child: HeroSlider(slides: _slides),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                            child: _sectionTitle('🔥 TIPSTERS', color: AppColors.accent),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
                             child: Row(
                               children: [
                                 ChoiceChip(
@@ -1559,7 +2271,7 @@ class _TipstersTabState extends State<TipstersTab> with ReloadOnLogin<TipstersTa
 
   Widget _emptyState() {
     return Padding(
-      padding: const EdgeInsets.only(top: 100),
+      padding: const EdgeInsets.only(top: 50, bottom: 50),
       child: Column(
         children: [
           const Icon(Icons.people_outline, size: 60, color: AppColors.muted),
@@ -1755,7 +2467,7 @@ class _TipsterDetailScreenState extends State<TipsterDetailScreen> with ReloadOn
     return Scaffold(
       appBar: AppBar(title: Text((_str(tipster?['name']) ?? 'Tipster').toUpperCase())),
       body: loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          ? skeletonProfile()
           : tipster == null
               ? _errorState(error ?? 'Tipster hapatikani', reload)
               : RefreshIndicator(
@@ -1994,7 +2706,7 @@ class _MikekaTabState extends State<MikekaTab> with ReloadOnLogin<MikekaTab> {
           actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: reload)],
         ),
         body: loading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+            ? skeletonSlipList()
             : RefreshIndicator(
                 color: AppColors.accent,
                 backgroundColor: AppColors.card,
@@ -2360,7 +3072,7 @@ class _SingleSlipsTabState extends State<SingleSlipsTab> with ReloadOnLogin<Sing
         actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: reload)],
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          ? skeletonSlipList(withHeader: false)
           : RefreshIndicator(
               color: AppColors.accent,
               backgroundColor: AppColors.card,
@@ -2524,7 +3236,7 @@ class _ProfileTabState extends State<ProfileTab> {
             }, color: AppColors.gold),
           _actionTile(Icons.phone, 'Badilisha Namba', () => _changePhone(context)),
           _actionTile(Icons.history, 'Historia ya Malipo', () => _showPayments(context)),
-          _actionTile(Icons.emoji_events, 'Washindi', () => _openUrl(context, AppState.I.washindiUrl)),
+          _actionTile(Icons.emoji_events, 'Washindi', () => _openUrl(context, AppState.I.washindiUrl, title: 'WASHINDI')),
           ..._infoTiles(context),
           _actionTile(Icons.logout, 'Toka', () => _logout(context), color: AppColors.red),
           _footer(),
@@ -2713,13 +3425,8 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _showPayments(BuildContext context) async {
-    final res = await ApiClient.get('me/payments', query: {'limit': 20});
-    if (!context.mounted) return;
-    if (!res.success) {
-      _showSnack(context, res.error ?? 'Hitilafu', isError: true);
-      return;
-    }
-    final payments = _list(res['payments']);
+    // Open the sheet straight away and show skeleton rows while loading.
+    final request = ApiClient.get('me/payments', query: {'limit': 20});
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.card,
@@ -2729,7 +3436,21 @@ class _ProfileTabState extends State<ProfileTab> {
         expand: false,
         initialChildSize: 0.6,
         maxChildSize: 0.9,
-        builder: (_, scroll) => ListView(
+        builder: (_, scroll) => FutureBuilder<ApiResponse>(
+          future: request,
+          builder: (_, snap) {
+            final res = snap.data;
+            final payments = res != null && res.success ? _list(res['payments']) : <Map<String, dynamic>>[];
+            return _paymentsList(scroll, snap.connectionState != ConnectionState.done, res, payments);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _paymentsList(
+      ScrollController scroll, bool waiting, ApiResponse? res, List<Map<String, dynamic>> payments) {
+    return ListView(
           controller: scroll,
           padding: const EdgeInsets.all(16),
           children: [
@@ -2738,7 +3459,16 @@ class _ProfileTabState extends State<ProfileTab> {
                   style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900)),
             ),
             const SizedBox(height: 12),
-            if (payments.isEmpty)
+            if (waiting)
+              skeletonRows()
+            else if (res == null || !res.success)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                    child: Text(res?.error ?? 'Hitilafu. Jaribu tena.',
+                        textAlign: TextAlign.center, style: const TextStyle(color: AppColors.red))),
+              )
+            else if (payments.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(20),
                 child: Center(child: Text('Hakuna malipo bado', style: TextStyle(color: AppColors.muted))),
@@ -2769,8 +3499,6 @@ class _ProfileTabState extends State<ProfileTab> {
                 );
               }),
           ],
-        ),
-      ),
     );
   }
 
@@ -3121,6 +3849,8 @@ class BetslipCard extends StatelessWidget {
                   height: 160,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  loadingBuilder: (c, child, p) =>
+                      p == null ? child : SizedBox(height: 160, child: _imageSkeleton(c, child, p)),
                   errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ),
@@ -4048,7 +4778,7 @@ class _TipsterSlipsScreenState extends State<TipsterSlipsScreen> {
         label: const Text('MKEKA MPYA', style: TextStyle(fontWeight: FontWeight.w900)),
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          ? skeletonSlipList(withHeader: false)
           : RefreshIndicator(
               onRefresh: _load,
               color: AppColors.accent,
@@ -4329,9 +5059,17 @@ void _showSnack(BuildContext context, String message, {bool isError = false}) {
   );
 }
 
-Future<void> _openUrl(BuildContext context, String url) async {
-  final uri = Uri.tryParse(url);
+/// Web links open inside the app; mailto:/tel:/whatsapp: go to the phone's app.
+Future<void> _openUrl(BuildContext context, String url, {String? title}) async {
+  final uri = Uri.tryParse(url.trim());
   if (uri == null) return;
+  if (uri.scheme == 'http' || uri.scheme == 'https') {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => InAppBrowserScreen(url: uri.toString(), title: title)),
+    );
+    return;
+  }
   try {
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && context.mounted) _showSnack(context, 'Imeshindikana kufungua link.', isError: true);
