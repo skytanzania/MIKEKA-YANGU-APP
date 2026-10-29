@@ -402,6 +402,45 @@ class ApiClient {
     return h;
   }
 
+  // ---- Web version only ----------------------------------------------
+  // A browser follows redirects by itself and turns a redirected POST into a
+  // GET, so the server answers "Method hairuhusiwi". We find the address
+  // api.php really answers on once, then always call that address directly.
+  static Uri? _webBase;
+  static Future<void>? _webBaseCheck;
+
+  static Uri get _base {
+    if (_webBase != null) return _webBase!;
+    if (kIsWeb) {
+      // Served from mikekaapp.co.tz (e.g. /app/): call the API on the same
+      // origin, so no CORS and no www / non-www redirect.
+      final page = Uri.base;
+      if (page.host == 'mikekaapp.co.tz' || page.host.endsWith('.mikekaapp.co.tz')) {
+        return Uri(scheme: page.scheme, host: page.host, port: page.hasPort ? page.port : null, path: '/api.php');
+      }
+    }
+    return Uri.parse(AppConfig.API_BASE);
+  }
+
+  static Future<void> _resolveWebBase() async {
+    final client = http.Client();
+    try {
+      final start = _uri('config');
+      final r = await client.send(http.Request('GET', start)).timeout(_timeout);
+      if (r case http.BaseResponseWithUrl(:final url)) {
+        if (url.host != start.host || url.path != start.path || url.scheme != start.scheme) {
+          _webBase = Uri(scheme: url.scheme, host: url.host, port: url.hasPort ? url.port : null, path: url.path);
+          debugPrint('API base redirected to $_webBase');
+        }
+      }
+      await r.stream.drain<void>();
+    } catch (_) {
+      // Keep the default address; the real request will report any problem.
+    } finally {
+      client.close();
+    }
+  }
+
   /// Uses ?route= so it works even when the host disables PATH_INFO.
   static Uri _uri(String path, [Map<String, dynamic>? query]) {
     final route = path.startsWith('/') ? path.substring(1) : path;
@@ -409,7 +448,7 @@ class ApiClient {
     query?.forEach((k, v) {
       if (v != null) q[k] = v.toString();
     });
-    return Uri.parse(AppConfig.API_BASE).replace(queryParameters: q);
+    return _base.replace(queryParameters: q);
   }
 
   static Future<ApiResponse> get(String path, {Map<String, dynamic>? query}) =>
@@ -426,6 +465,7 @@ class ApiClient {
     Map<String, dynamic>? query,
     Map<String, dynamic>? body,
   }) async {
+    if (kIsWeb) await (_webBaseCheck ??= _resolveWebBase());
     final hadToken = await hasToken();
     late http.Response res;
     try {
