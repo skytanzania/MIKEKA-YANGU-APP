@@ -13,6 +13,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -1986,7 +1987,11 @@ class _InAppBrowserScreenState extends State<InAppBrowserScreen> {
           setState(() {
             _firstLoadDone = true;
             _progress = 100;
-            if (t != null && t.trim().isNotEmpty) _pageTitle = t.trim();
+            // Some pages have no <title> and WebView returns the URL instead.
+            final clean = t?.trim() ?? '';
+            if (clean.isNotEmpty && !clean.contains('://') && !RegExp(r'^[\w.-]+\.[a-z]{2,}(/.*)?$').hasMatch(clean)) {
+              _pageTitle = clean;
+            }
           });
         },
         onWebResourceError: (e) {
@@ -2035,7 +2040,6 @@ class _InAppBrowserScreenState extends State<InAppBrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final host = Uri.tryParse(widget.url)?.host ?? '';
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -2044,27 +2048,11 @@ class _InAppBrowserScreenState extends State<InAppBrowserScreen> {
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-          centerTitle: false,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _pageTitle ?? widget.title ?? host,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.text, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0),
-              ),
-              Row(children: [
-                const Icon(Icons.lock, size: 10, color: AppColors.success),
-                const SizedBox(width: 3),
-                Flexible(
-                  child: Text(host,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.muted, fontSize: 10, letterSpacing: 0)),
-                ),
-              ]),
-            ],
+          // The web address is never shown, only the page name.
+          title: Text(
+            (widget.title ?? _pageTitle ?? AppConfig.APP_NAME).toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => _web.reload())],
           bottom: PreferredSize(
@@ -3718,7 +3706,7 @@ class BetslipCard extends StatelessWidget {
     final tipster = _slipTipster(slip);
     final tipsterName = _str(tipster['name']);
     final system = isSystemGenerated || _asBool(slip['is_system_generated']) || slip['slip_type'] == 'system';
-    final imageUrl = _str(slip['image_url']);
+    final imageUrl = _slipImageUrl(slip);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -3839,20 +3827,13 @@ class BetslipCard extends StatelessWidget {
                 style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
               ),
             ),
-          if (imageUrl != null && !locked)
+          if (imageUrl != null || locked)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  imageUrl,
-                  height: 160,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (c, child, p) =>
-                      p == null ? child : SizedBox(height: 160, child: _imageSkeleton(c, child, p)),
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                ),
+              child: SlipImage(
+                url: imageUrl,
+                locked: locked,
+                onUnlock: () => startPackagePurchase(context),
               ),
             ),
           // Badges
@@ -3921,6 +3902,178 @@ class BetslipCard extends StatelessWidget {
 }
 
 // ============================================================
+// SLIP IMAGE (blurred + locked for unpaid users, clear for paid)
+// ============================================================
+String? _absUrl(String? url) {
+  if (url == null || url.trim().isEmpty) return null;
+  final u = url.trim();
+  if (u.startsWith('http')) return u;
+  return Uri.parse(AppConfig.API_BASE).resolve(u).toString();
+}
+
+String? _slipImageUrl(Map<String, dynamic> s) => _absUrl(_str(s['image_url']) ??
+    _str(s['slip_image']) ??
+    _str(s['image']) ??
+    _str(s['screenshot']) ??
+    _str(s['blurred_image_url']));
+
+class SlipImage extends StatelessWidget {
+  final String? url;
+  final bool locked;
+  final VoidCallback? onUnlock;
+  final double height;
+  const SlipImage({super.key, required this.url, required this.locked, this.onUnlock, this.height = 220});
+
+  @override
+  Widget build(BuildContext context) {
+    final img = url == null
+        ? _fakeSlip()
+        : Image.network(
+            url!,
+            width: double.infinity,
+            height: height,
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+            loadingBuilder: (c, child, p) =>
+                p == null ? child : SizedBox(height: height, child: _imageSkeleton(c, child, p)),
+            errorBuilder: (_, __, ___) => locked ? _fakeSlip() : const SizedBox.shrink(),
+          );
+
+    if (!locked) {
+      return GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => _SlipImageViewer(url: url!)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(children: [
+            img,
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.zoom_in, size: 18, color: Colors.white),
+              ),
+            ),
+          ]),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onUnlock,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          height: height,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 14, sigmaY: 14, tileMode: TileMode.decal),
+                child: img,
+              ),
+              Container(color: const Color(0x99000010)),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.gold.withOpacity(0.15),
+                        border: Border.all(color: AppColors.gold.withOpacity(0.6)),
+                      ),
+                      child: const Icon(Icons.lock, color: AppColors.gold, size: 26),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('PICHA YA MKEKA IMEFUNGWA',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    const Text('Lipia kifurushi kuona mkeka kamili',
+                        style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    if (onUnlock != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(20)),
+                        child: const Text('🔓 FUNGUA',
+                            style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.w900)),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Drawn stand-in for a betslip, used under the blur when there is no image.
+  Widget _fakeSlip() {
+    Widget line(double w, Color c) => Container(
+          width: w,
+          height: 9,
+          margin: const EdgeInsets.only(bottom: 9),
+          decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(4)),
+        );
+    return Container(
+      height: height,
+      width: double.infinity,
+      color: const Color(0xFFF2F4F7),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(height: 22, color: const Color(0xFF0B8A3E)),
+          const SizedBox(height: 12),
+          for (var i = 0; i < 5; i++)
+            Row(children: [
+              Expanded(child: line(double.infinity, const Color(0xFF9AA3AF))),
+              const SizedBox(width: 20),
+              line(34, const Color(0xFF0B8A3E)),
+            ]),
+          const Spacer(),
+          Row(children: [line(80, const Color(0xFF6B7280)), const Spacer(), line(50, const Color(0xFFE11D48))]),
+        ],
+      ),
+    );
+  }
+}
+
+class _SlipImageViewer extends StatelessWidget {
+  final String url;
+  const _SlipImageViewer({required this.url});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(backgroundColor: Colors.black, title: const Text('PICHA YA MKEKA')),
+      body: InteractiveViewer(
+        minScale: 1,
+        maxScale: 5,
+        child: Center(
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            loadingBuilder: (c, child, p) => p == null ? child : Shimmer(child: _bone(width: 260, height: 420)),
+            errorBuilder: (_, __, ___) =>
+                const Text('Picha haikupatikana', style: TextStyle(color: AppColors.muted)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
 // SINGLE SLIP CARD
 // ============================================================
 class SingleSlipCard extends StatelessWidget {
@@ -3951,6 +4104,7 @@ class SingleSlipCard extends StatelessWidget {
     final matchDetails = slip['match_details']?.toString() ?? '';
     final odds = _str(slip['odds']);
     final validityTs = _asInt(slip['validity_ts']);
+    final imageUrl = _slipImageUrl(slip);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -4077,6 +4231,10 @@ class SingleSlipCard extends StatelessWidget {
               ]),
               style: const TextStyle(color: Colors.white70, fontSize: 11, height: 1.4),
             ),
+          ],
+          if (imageUrl != null || !unlocked) ...[
+            const SizedBox(height: 10),
+            SlipImage(url: imageUrl, locked: !unlocked, onUnlock: onBuy),
           ],
           const SizedBox(height: 8),
           Wrap(
