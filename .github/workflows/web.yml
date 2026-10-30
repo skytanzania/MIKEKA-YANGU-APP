@@ -43,6 +43,7 @@ jobs:
         run: |
           flutter build web --release --base-href /app/ --no-source-maps
           cp .github/web-htaccess build/web/.htaccess
+          cp .github/web-kill-sw.js build/web/flutter_service_worker.js
           # Pre-compressed copies: Apache serves the small .gz file when the
           # browser accepts gzip (main.dart.js ~2.5 MB -> ~0.7 MB).
           find build/web -type f \( -name '*.js' -o -name '*.json' -o -name '*.wasm' -o -name '*.html' -o -name '*.otf' -o -name '*.ttf' \) \
@@ -61,6 +62,7 @@ jobs:
         run: |
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
           flutter build web --release --base-href "/${REPO_NAME}/" --no-source-maps
+          cp .github/web-kill-sw.js build/web/flutter_service_worker.js
           cp build/web/index.html build/web/404.html
 
       # One-time setup: Settings → Pages → Source: "GitHub Actions".

@@ -67,6 +67,28 @@
     </div>
   </div>
   <script>
+    // Older versions installed a service worker that keeps showing the old
+    // app. Remove it and its saved files once, then reload with the new one.
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        if (!regs.length) return;
+        var jobs = regs.map(function (r) { return r.unregister(); });
+        if (window.caches) {
+          jobs.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }));
+        }
+        Promise.all(jobs).then(function () {
+          try {
+            if (sessionStorage.getItem('mikeka_sw_cleared')) return;
+            sessionStorage.setItem('mikeka_sw_cleared', '1');
+          } catch (e) {}
+          location.reload();
+        });
+      }).catch(function () {});
+    })();
+
     window.addEventListener('flutter-first-frame', function () {
       var b = document.getElementById('boot');
       if (!b) return;
