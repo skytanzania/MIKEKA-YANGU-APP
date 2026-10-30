@@ -50,7 +50,7 @@ void main() async {
 class AppConfig {
   static const String API_BASE = 'https://mikekaapp.co.tz/api.php';
   static const String APP_NAME = 'MIKEKA APP';
-  static const String VERSION = '1.4.0';
+  static const String VERSION = '1.5.0';
   static const String DEFAULT_WASHINDI_URL = 'https://odds-mikeka.mikekaapp.co.tz/users.php';
   static const String SUPPORT_EMAIL = 'admin@mikekaapp.co.tz';
 
@@ -4596,11 +4596,9 @@ class SingleSlipCard extends StatelessWidget {
 // ============================================================
 // PURCHASE ENTRY POINTS (login first if needed)
 // ============================================================
+/// Guests can pay straight away: the account is created / opened in the
+/// background from the phone number they pay with (see PaymentFlow).
 Future<void> startPackagePurchase(BuildContext context, {String? packageType}) async {
-  if (!AppState.I.loggedIn) {
-    final ok = await _showLoginPrompt(context);
-    if (!ok || !context.mounted) return;
-  }
   final chosen = packageType ?? await _pickPackage(context);
   if (chosen == null || !context.mounted) return;
   await Navigator.push(
@@ -4610,10 +4608,6 @@ Future<void> startPackagePurchase(BuildContext context, {String? packageType}) a
 }
 
 Future<bool> startSingleSlipPurchase(BuildContext context, Map<String, dynamic> slip) async {
-  if (!AppState.I.loggedIn) {
-    final ok = await _showLoginPrompt(context);
-    if (!ok || !context.mounted) return false;
-  }
   final bought = await Navigator.push<bool>(
     context,
     MaterialPageRoute(builder: (_) => BuySingleSlipScreen(slip: slip)),
@@ -4816,6 +4810,34 @@ mixin PaymentFlow<T extends StatefulWidget> on State<T> {
     return null;
   }
 
+  /// Guest → opens the account for [phone], creating it if it is new
+  /// (no extra screens). Returns an error message, or null when logged in.
+  Future<String?> ensureAccount(String phone) async {
+    if (AppState.I.loggedIn) return null;
+    var res = await ApiClient.post('auth/login', data: _authPayload(phone));
+    if (res.success && res['action'] == 'need_confirmation') {
+      final digits = _normalizePhone(phone);
+      res = await ApiClient.post('auth/confirm', data: {
+        ..._authPayload(phone),
+        'phone_confirm': phone,
+        // Customer username for the new account (server may ignore it).
+        'name': 'Mteja ${digits.substring(digits.length - 4)}',
+        'username': 'mteja$digits',
+        'source': 'auto_payment',
+      });
+    }
+    if (!res.success) {
+      final reason = res.banReason;
+      return [res.error ?? 'Imeshindikana kufungua akaunti.', if (reason != null) 'Sababu: $reason'].join('\n');
+    }
+    final token = _str(res['token']);
+    if (token == null) return 'Imeshindikana kufungua akaunti. Jaribu tena.';
+    await ApiClient.setToken(token);
+    final me = await AppState.I.refresh();
+    if (!me.success) return me.error ?? 'Imeshindikana kupakua taarifa zako.';
+    return null;
+  }
+
   Widget phoneAndNetworkFields(Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4867,6 +4889,13 @@ class _PayPackageScreenState extends State<PayPackageScreen> with PaymentFlow<Pa
       return;
     }
     setState(() => loading = true);
+    final authError = await ensureAccount(phoneCtrl.text.trim());
+    if (!mounted) return;
+    if (authError != null) {
+      setState(() => loading = false);
+      _showSnack(context, authError, isError: true);
+      return;
+    }
     final res = await ApiClient.post('orders/package', data: {
       'package_type': widget.packageType,
       'phone': phoneCtrl.text.trim(),
@@ -5025,6 +5054,13 @@ class _BuySingleSlipScreenState extends State<BuySingleSlipScreen> with PaymentF
       return;
     }
     setState(() => loading = true);
+    final authError = await ensureAccount(phoneCtrl.text.trim());
+    if (!mounted) return;
+    if (authError != null) {
+      setState(() => loading = false);
+      _showSnack(context, authError, isError: true);
+      return;
+    }
     final res = await ApiClient.post('orders/single', data: {
       'betslip_id': _asInt(widget.slip['id']),
       'phone': phoneCtrl.text.trim(),
