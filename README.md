@@ -58,7 +58,7 @@ Toleo la web linajengwa kutoka `lib/main.dart` ileile (`.github/workflows/web.ym
 
 - **GitHub Pages (bure):** https://skytanzania.github.io/MIKEKA-YANGU-APP/
   (mara ya kwanza: **Settings → Pages → Source: GitHub Actions**).
-- **cPanel (mikekaapp.co.tz/app/):** Actions → run → Artifacts → `mikeka-web-cpanel` → fungua zip ndani ya `public_html/app/`.
+- **cPanel (mikekaapp.co.tz/app/):** Actions → run → Artifacts → `mikeka-web-cpanel` → pakia zip ndani ya `public_html/app/` → **Extract** mara moja → futa zip. (Profile inaonyesha toleo, mf. v1.3.0.)
   Hapa hakuna haja ya CORS kwa sababu web app na `api.php` ziko kwenye domain moja.
 - Ukitumia GitHub Pages, `api.php` lazima iruhusu CORS kwa `https://skytanzania.github.io`.
 - Watumiaji wanaweza "Add to Home Screen" (PWA) kwenye Android, iPhone na kompyuta.

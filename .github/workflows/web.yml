@@ -48,13 +48,17 @@ jobs:
           # browser accepts gzip (main.dart.js ~2.5 MB -> ~0.7 MB).
           find build/web -type f \( -name '*.js' -o -name '*.json' -o -name '*.wasm' -o -name '*.html' -o -name '*.otf' -o -name '*.ttf' \) \
             -exec gzip -9 -k -f {} \;
-          (cd build/web && zip -qr ../../mikeka-web-cpanel.zip .)
+          # Keep the cPanel files apart: the Pages build below reuses build/web.
+          rm -rf cpanel-site && cp -r build/web cpanel-site
 
-      - name: Upload cPanel zip
+      # GitHub zips the artifact itself, so upload the files (not a zip):
+      # the downloaded mikeka-web-cpanel.zip needs only ONE extract in cPanel.
+      - name: Upload cPanel files
         uses: actions/upload-artifact@v4
         with:
           name: mikeka-web-cpanel
-          path: mikeka-web-cpanel.zip
+          path: cpanel-site/
+          include-hidden-files: true   # keeps .htaccess
           if-no-files-found: error
           retention-days: 30
 
