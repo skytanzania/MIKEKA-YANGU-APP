@@ -50,7 +50,7 @@ void main() async {
 class AppConfig {
   static const String API_BASE = 'https://mikekaapp.co.tz/api.php';
   static const String APP_NAME = 'MIKEKA APP';
-  static const String VERSION = '1.3.0';
+  static const String VERSION = '1.4.0';
   static const String DEFAULT_WASHINDI_URL = 'https://odds-mikeka.mikekaapp.co.tz/users.php';
   static const String SUPPORT_EMAIL = 'admin@mikekaapp.co.tz';
 
@@ -910,6 +910,7 @@ class AppState extends ChangeNotifier {
     isTipster = _asBool(d['is_tipster']);
     isSubscribed = _asBool(d['is_subscribed']);
     loggedIn = true;
+    if (isSubscribed) mikekaCount = todaysSlips.length;
     notifyListeners();
   }
 
@@ -930,6 +931,59 @@ class AppState extends ChangeNotifier {
   }
 
   bool isPopupDismissed(String type) => dismissedPopups.contains(type);
+
+  // ------------------------------------------------------------
+  // Badges on the bottom menu: how many slips are available right now.
+  int mikekaCount = 0;
+  int singlesCount = 0;
+  Future<void>? _countsJob;
+
+  /// Today's slips available (for subscribers: the slips they can open;
+  /// for others: how many are waiting behind the paywall).
+  void setMikekaCount(int n) {
+    if (n == mikekaCount) return;
+    mikekaCount = n;
+    notifyListeners();
+  }
+
+  /// Single slips the user can still buy (not bought yet, not expired).
+  void setSinglesFromList(List<Map<String, dynamic>> slips) {
+    final now = AppClock.nowUnix();
+    final n = slips.where((x) {
+      if (_asBool(x['is_purchased'])) return false;
+      final until = _asInt(x['validity_ts']);
+      return until == 0 || until > now;
+    }).length;
+    if (n == singlesCount) return;
+    singlesCount = n;
+    notifyListeners();
+  }
+
+  Future<void> refreshCounts() => _countsJob ??= _loadCounts().whenComplete(() => _countsJob = null);
+
+  Future<void> _loadCounts() async {
+    final results = await Future.wait([ApiClient.get('singles'), ApiClient.get('home')]);
+    final singles = results[0];
+    final home = results[1];
+    if (singles.success) setSinglesFromList(_list(singles['slips']));
+    if (isSubscribed) {
+      setMikekaCount(todaysSlips.length);
+    } else if (home.success) {
+      final d = home.data;
+      var n = 0;
+      for (final k in ['todays_count', 'today_count', 'todays_slips_count', 'slips_today_count', 'total_today']) {
+        if (d[k] != null) {
+          n = _asInt(d[k]);
+          break;
+        }
+      }
+      final preview = _map(d['preview']);
+      if (n == 0) n = _asInt(preview['total'] ?? preview['count']);
+      if (n == 0) n = _list(d['todays_slips']).length;
+      if (n == 0 && (d['preview'] is Map || d['locked_preview'] is Map || d['preview_slip'] is Map)) n = 1;
+      setMikekaCount(n);
+    }
+  }
 }
 
 // ============================================================
@@ -1141,6 +1195,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _index = 0;
   Timer? _sessionTimer;
   Timer? _winTimer;
+  Timer? _countsTimer;
   bool _wasLoggedIn = false;
   bool _popupOpen = false;
 
@@ -1157,6 +1212,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     AppState.I.addListener(_onStateChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _onStateChanged());
+    AppState.I.refreshCounts();
+    _countsTimer = Timer.periodic(const Duration(minutes: 2), (_) => AppState.I.refreshCounts());
   }
 
   @override
@@ -1164,11 +1221,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     AppState.I.removeListener(_onStateChanged);
     _stopTimers();
+    _countsTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) AppState.I.refreshCounts();
     if (state == AppLifecycleState.resumed && AppState.I.loggedIn) {
       AppState.I.refresh();
       _checkNewWin();
@@ -1177,6 +1236,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _onStateChanged() {
     final loggedIn = AppState.I.loggedIn;
+    if (loggedIn != _wasLoggedIn) AppState.I.refreshCounts();
     if (loggedIn && !_wasLoggedIn) {
       _wasLoggedIn = true;
       _startTimers();
@@ -1425,8 +1485,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildBottomNav() {
     final items = <Map<String, dynamic>>[
       {'icon': Icons.people_alt_outlined, 'active': Icons.people_alt, 'label': 'Tipsters'},
-      {'icon': Icons.confirmation_num_outlined, 'active': Icons.confirmation_num, 'label': 'Mikeka'},
-      {'icon': Icons.track_changes_outlined, 'active': Icons.track_changes, 'label': 'Single'},
+      {
+        'icon': Icons.confirmation_num_outlined,
+        'active': Icons.confirmation_num,
+        'label': 'Mikeka',
+        'badge': AppState.I.mikekaCount,
+        'badgeColor': AppColors.red,
+      },
+      {
+        'icon': Icons.track_changes_outlined,
+        'active': Icons.track_changes,
+        'label': 'Single',
+        'badge': AppState.I.singlesCount,
+        'badgeColor': AppColors.gold,
+      },
       {'icon': Icons.person_outline, 'active': Icons.person, 'label': AppState.I.loggedIn ? 'Profile' : 'Ingia'},
     ];
 
@@ -1452,10 +1524,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    active ? items[i]['active'] as IconData : items[i]['icon'] as IconData,
-                    color: active ? AppColors.accent : AppColors.muted,
-                    size: 22,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        active ? items[i]['active'] as IconData : items[i]['icon'] as IconData,
+                        color: active ? AppColors.accent : AppColors.muted,
+                        size: 22,
+                      ),
+                      if ((items[i]['badge'] as int? ?? 0) > 0)
+                        Positioned(
+                          right: -10,
+                          top: -6,
+                          child: _navBadge(items[i]['badge'] as int, items[i]['badgeColor'] as Color),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -1474,6 +1557,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+/// Small red/gold number on a bottom-menu icon.
+Widget _navBadge(int n, Color color) {
+  return Container(
+    constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(9),
+      border: Border.all(color: const Color(0xFF0A0A19), width: 1.5),
+    ),
+    child: Text(n > 99 ? '99+' : '$n',
+        style: TextStyle(
+          color: color == AppColors.gold ? Colors.black : Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          height: 1.1,
+        )),
+  );
 }
 
 // ============================================================
@@ -2843,8 +2947,15 @@ class _MikekaTabState extends State<MikekaTab> with ReloadOnLogin<MikekaTab> {
     if (!AppState.I.isSubscribed) {
       final res = await ApiClient.get('slips/preview');
       previewSlip = res.success ? _mapOrNull(res['slip']) : null;
+      final n = _asInt(res['total'] ?? res['count'] ?? res['todays_count']);
+      if (n > 0) {
+        AppState.I.setMikekaCount(n);
+      } else if (previewSlip != null && AppState.I.mikekaCount == 0) {
+        AppState.I.setMikekaCount(1);
+      }
     } else {
       previewSlip = null;
+      AppState.I.setMikekaCount(AppState.I.todaysSlips.length);
     }
     if (mounted) setState(() => loading = false);
   }
@@ -3202,6 +3313,7 @@ class _SingleSlipsTabState extends State<SingleSlipsTab> with ReloadOnLogin<Sing
     setState(() {
       if (res.success) {
         slips = _list(res['slips']);
+        AppState.I.setSinglesFromList(slips);
       } else {
         error = res.error;
       }
@@ -3234,6 +3346,14 @@ class _SingleSlipsTabState extends State<SingleSlipsTab> with ReloadOnLogin<Sing
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        // Slips the user already paid for come first.
+                        if (AppState.I.loggedIn && purchased.isNotEmpty) ...[
+                          _sectionTitle('✅ MIKEKA YANGU YA SINGLE (ULIYOLIPIA)',
+                              color: AppColors.success,
+                              trailing: _countBadge(purchased.length, color: AppColors.success, textColor: Colors.black)),
+                          ...purchased.map((s) => SingleSlipCard(slip: s, purchased: true)),
+                          const SizedBox(height: 12),
+                        ],
                         _sectionTitle('🎯 MIKEKA YA SINGLE — NUNUA MMOJA MMOJA',
                             trailing: _countBadge(forSale.length, color: AppColors.gold, textColor: Colors.black)),
                         if (forSale.isEmpty)
@@ -3257,11 +3377,6 @@ class _SingleSlipsTabState extends State<SingleSlipsTab> with ReloadOnLogin<Sing
                           )
                         else
                           ...forSale.map((s) => SingleSlipCard(slip: s, onBuy: () => _buy(s))),
-                        if (AppState.I.loggedIn && purchased.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          _sectionTitle('✅ MIKEKA YANGU YA SINGLE (ULIYOLIPIA)', color: AppColors.success),
-                          ...purchased.map((s) => SingleSlipCard(slip: s, purchased: true)),
-                        ],
                       ],
                     ),
             ),
