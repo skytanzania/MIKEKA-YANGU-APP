@@ -7,8 +7,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>MIKEKA APP - Mikeka ya Leo Tanzania</title>
-  <meta name="description" content="MIKEKA APP — mikeka ya leo, tipsters bora Tanzania, vifurushi vya VIP na single slips. Bure kwenye simu na kompyuta.">
+  <meta name="description" content="MIKEKA APP — mikeka ya leo, tipsters bora Tanzania, vifurushi vya VIP na single slips.">
   <meta name="theme-color" content="#000010">
+
+  <!-- Start downloads early: the app code and the CanvasKit engine (Google CDN). -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" href="main.dart.js" as="script">
 
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,36 +29,49 @@
 
   <style>
     html, body { margin: 0; height: 100%; background: #000010; }
-    /* Skeleton shown while the app downloads; removed on Flutter's first frame. */
-    #boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; gap: 14px; font-family: Roboto, system-ui, sans-serif;
-            transition: opacity .3s ease; }
-    #boot img { width: 84px; height: 84px; border-radius: 20px; }
-    #boot h1 { margin: 6px 0 0; color: #00FFC8; font-size: 24px; font-weight: 900; letter-spacing: 3px; }
-    #boot p { margin: 0; color: #8899AA; font-size: 13px; }
-    .bar { width: 160px; height: 8px; border-radius: 4px; background: #1A1A2E; overflow: hidden; position: relative; }
-    .bar.short { width: 100px; }
-    .bar::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
-                  background: linear-gradient(90deg, transparent, #2A2A44, transparent);
-                  animation: shimmer 1.4s infinite; }
-    @keyframes shimmer { to { transform: translateX(100%); } }
+    /* Skeleton of the home screen shown while the app downloads (no logo).
+       Same layout as the app's own skeleton, so the switch is seamless. */
+    #boot { position: fixed; inset: 0; padding: 10px 12px; box-sizing: border-box;
+            overflow: hidden; transition: opacity .25s ease; }
+    #boot .b { background: #1A1A2E; border-radius: 8px; position: relative; overflow: hidden; }
+    #boot .b::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+                      background: linear-gradient(90deg, transparent, #2A2A44, transparent);
+                      animation: sh 1.4s infinite; }
+    @keyframes sh { to { transform: translateX(100%); } }
+    .slider { height: 250px; border-radius: 18px !important; max-width: 640px; margin: 0 auto; }
+    .dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 16px; }
+    .dots .b { height: 7px; width: 7px; border-radius: 4px; }
+    .dots .b:first-child { width: 18px; }
+    .row { display: flex; gap: 8px; margin: 14px 0 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .card { background: #111122; border: 1px solid #ffffff14; border-radius: 16px; padding: 12px;
+            display: flex; flex-direction: column; align-items: center; gap: 8px; height: 230px; box-sizing: border-box; }
+    .av { width: 64px; height: 64px; border-radius: 50% !important; }
+    .btn { margin-top: auto; width: 100%; height: 32px; border-radius: 12px !important; }
   </style>
 </head>
 <body>
-  <div id="boot">
-    <img src="icons/Icon-192.png" alt="">
-    <h1>MIKEKA APP</h1>
-    <p>Mikeka ya Leo Tanzania</p>
-    <div style="height:22px"></div>
-    <div class="bar"></div>
-    <div class="bar short"></div>
+  <div id="boot" aria-hidden="true">
+    <div class="b slider"></div>
+    <div class="dots"><div class="b"></div><div class="b"></div><div class="b"></div></div>
+    <div class="b" style="width:110px;height:14px"></div>
+    <div class="row">
+      <div class="b" style="width:86px;height:32px;border-radius:16px"></div>
+      <div class="b" style="width:120px;height:32px;border-radius:16px"></div>
+    </div>
+    <div class="grid">
+      <div class="card"><div class="b av"></div><div class="b" style="width:90px;height:12px"></div><div class="b" style="width:50px;height:10px"></div><div class="b btn"></div></div>
+      <div class="card"><div class="b av"></div><div class="b" style="width:90px;height:12px"></div><div class="b" style="width:50px;height:10px"></div><div class="b btn"></div></div>
+      <div class="card"><div class="b av"></div><div class="b" style="width:90px;height:12px"></div><div class="b" style="width:50px;height:10px"></div><div class="b btn"></div></div>
+      <div class="card"><div class="b av"></div><div class="b" style="width:90px;height:12px"></div><div class="b" style="width:50px;height:10px"></div><div class="b btn"></div></div>
+    </div>
   </div>
   <script>
     window.addEventListener('flutter-first-frame', function () {
       var b = document.getElementById('boot');
       if (!b) return;
       b.style.opacity = '0';
-      setTimeout(function () { b.remove(); }, 300);
+      setTimeout(function () { b.remove(); }, 250);
     });
   </script>
   <script src="flutter_bootstrap.js" async></script>

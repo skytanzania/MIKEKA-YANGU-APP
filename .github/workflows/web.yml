@@ -41,15 +41,12 @@ jobs:
 
       - name: Build for cPanel (mikekaapp.co.tz/app/)
         run: |
-          flutter build web --release --base-href /app/
-          cat > build/web/.htaccess <<'EOF'
-          AddType application/wasm .wasm
-          AddType application/manifest+json .webmanifest
-          <FilesMatch "(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js|manifest\.json)$">
-            Header set Cache-Control "no-cache, must-revalidate"
-          </FilesMatch>
-          EOF
-          sed -i 's/^          //' build/web/.htaccess
+          flutter build web --release --base-href /app/ --no-source-maps
+          cp .github/web-htaccess build/web/.htaccess
+          # Pre-compressed copies: Apache serves the small .gz file when the
+          # browser accepts gzip (main.dart.js ~2.5 MB -> ~0.7 MB).
+          find build/web -type f \( -name '*.js' -o -name '*.json' -o -name '*.wasm' -o -name '*.html' -o -name '*.otf' -o -name '*.ttf' \) \
+            -exec gzip -9 -k -f {} \;
           (cd build/web && zip -qr ../../mikeka-web-cpanel.zip .)
 
       - name: Upload cPanel zip
@@ -63,7 +60,7 @@ jobs:
       - name: Build for GitHub Pages
         run: |
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          flutter build web --release --base-href "/${REPO_NAME}/"
+          flutter build web --release --base-href "/${REPO_NAME}/" --no-source-maps
           cp build/web/index.html build/web/404.html
 
       # One-time setup: Settings → Pages → Source: "GitHub Actions".

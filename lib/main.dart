@@ -50,7 +50,7 @@ void main() async {
 class AppConfig {
   static const String API_BASE = 'https://mikekaapp.co.tz/api.php';
   static const String APP_NAME = 'MIKEKA APP';
-  static const String VERSION = '1.2.0';
+  static const String VERSION = '1.3.0';
   static const String DEFAULT_WASHINDI_URL = 'https://odds-mikeka.mikekaapp.co.tz/users.php';
   static const String SUPPORT_EMAIL = 'admin@mikekaapp.co.tz';
 
@@ -465,7 +465,11 @@ class ApiClient {
     Map<String, dynamic>? query,
     Map<String, dynamic>? body,
   }) async {
-    if (kIsWeb) await (_webBaseCheck ??= _resolveWebBase());
+    if (kIsWeb) {
+      final check = _webBaseCheck ??= _resolveWebBase();
+      // Only POST/DELETE break on redirects; GETs start straight away.
+      if (method != 'GET') await check;
+    }
     final hadToken = await hasToken();
     late http.Response res;
     try {
@@ -709,14 +713,78 @@ class NetworkInfo {
   final String code;
   final String initial;
   final Color color;
-  const NetworkInfo(this.name, this.code, this.initial, this.color);
+  final String? logoUrl; // from GET config (networks[].logo_url), optional
+  const NetworkInfo(this.name, this.code, this.initial, this.color, [this.logoUrl]);
+
+  /// Mobile-money name shown on the card for each network code.
+  String get wallet {
+    switch (code.toLowerCase()) {
+      case 'vodacom':
+      case 'mpesa':
+      case 'm-pesa':
+        return 'M-PESA';
+      case 'yas':
+      case 'tigo':
+      case 'mixx':
+        return 'MIXX BY YAS';
+      case 'airtel':
+        return 'AIRTEL MONEY';
+      case 'halotel':
+      case 'halopesa':
+        return 'HALOPESA';
+      default:
+        return name.toUpperCase();
+    }
+  }
+
+  /// Bundled logo file: assets/networks/<code>.png (see assets/networks/README.md).
+  String get assetPath => 'assets/networks/${code.toLowerCase()}.png';
 
   static const List<NetworkInfo> defaults = [
-    NetworkInfo('VODACOM', 'vodacom', 'V', Color(0xFFC8102E)),
-    NetworkInfo('HALOTEL', 'halotel', 'H', Color(0xFFE8641B)),
-    NetworkInfo('YAS', 'yas', 'Y', Color(0xFF1F6FD1)),
-    NetworkInfo('AIRTEL', 'airtel', 'A', Color(0xFFB3123C)),
+    NetworkInfo('M-PESA', 'vodacom', 'M', Color(0xFFE60000)),
+    NetworkInfo('MIXX BY YAS', 'yas', 'Y', Color(0xFF0033A1)),
+    NetworkInfo('AIRTEL MONEY', 'airtel', 'A', Color(0xFFE40000)),
+    NetworkInfo('HALOPESA', 'halotel', 'H', Color(0xFFF26522)),
   ];
+}
+
+/// Network logo: server logo → bundled PNG → coloured badge with the wallet name.
+class NetworkLogo extends StatelessWidget {
+  final NetworkInfo net;
+  final double height;
+  const NetworkLogo({super.key, required this.net, this.height = 34});
+
+  Widget _badge() => Container(
+        height: height,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(color: net.color, borderRadius: BorderRadius.circular(8)),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(net.wallet,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11, height: 1.05)),
+        ),
+      );
+
+  Widget _asset() => Image.asset(net.assetPath,
+      height: height, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _badge());
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _absUrl(net.logoUrl);
+    final logo = url != null
+        ? _netImage(url, height: height, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _asset())
+        : _asset();
+    return Container(
+      height: height + 8,
+      width: double.infinity,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+      child: Center(child: logo),
+    );
+  }
 }
 
 // ============================================================
@@ -764,13 +832,22 @@ class AppState extends ChangeNotifier {
       packages.firstWhere((p) => p.type == type, orElse: () => PackageInfo.fallback(type));
 
   // ------------------------------------------------------------
+  /// Uses the saved config straight away; the fresh copy from the server
+  /// is applied when it arrives (start-up never waits for it when cached).
   Future<void> loadConfig() async {
     final cached = AppConfig.prefs.getString(_configCacheKey);
+    var hadCache = false;
     if (cached != null) {
       try {
         _applyConfig(Map<String, dynamic>.from(jsonDecode(cached) as Map));
+        hadCache = true;
       } catch (_) {}
     }
+    final fresh = _fetchConfig();
+    if (!hadCache) await fresh;
+  }
+
+  Future<void> _fetchConfig() async {
     final res = await ApiClient.get('config');
     if (res.success) {
       _applyConfig(res.data);
@@ -790,6 +867,7 @@ class AppState extends ChangeNotifier {
                 n['code']?.toString() ?? '',
                 n['initial']?.toString() ?? '?',
                 _hexColor(n['color'], AppColors.accent2),
+                _str(n['logo_url']) ?? _str(n['logo']) ?? _str(n['icon']),
               ))
           .toList();
     }
@@ -939,9 +1017,33 @@ class MikekaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       navigatorKey: appNavigatorKey,
-      home: const SplashScreen(),
+      // Web: open the home screen at once (it shows skeletons while data
+      // loads). Phones keep the short splash.
+      home: kIsWeb ? const _WebStart() : const SplashScreen(),
     );
   }
+}
+
+/// Web start: no logo screen. Config and login load in the background and
+/// the tabs reload themselves when the login state arrives.
+class _WebStart extends StatefulWidget {
+  const _WebStart();
+  @override
+  State<_WebStart> createState() => _WebStartState();
+}
+
+class _WebStartState extends State<_WebStart> {
+  @override
+  void initState() {
+    super.initState();
+    () async {
+      await AppState.I.loadConfig();
+      if (await ApiClient.hasToken()) await AppState.I.refresh();
+    }();
+  }
+
+  @override
+  Widget build(BuildContext context) => const HomeScreen();
 }
 
 // ============================================================
@@ -961,10 +1063,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait([
-      AppState.I.loadConfig(),
-      Future.delayed(const Duration(milliseconds: 700)),
-    ]);
+    await AppState.I.loadConfig();
     if (await ApiClient.hasToken()) {
       // Errors like kicked/banned are handled by handleAuthError.
       await AppState.I.refresh();
@@ -1650,7 +1749,7 @@ Widget skeletonHome() {
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       children: [
-        _bone(width: double.infinity, height: 170, radius: 18),
+        _bone(width: double.infinity, height: 250, radius: 18),
         const SizedBox(height: 10),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           for (var i = 0; i < 3; i++)
@@ -1824,13 +1923,28 @@ class HeroSlide {
 class HeroSlider extends StatefulWidget {
   final List<HeroSlide> slides;
   final double height;
-  const HeroSlider({super.key, required this.slides, this.height = 170});
+  const HeroSlider({super.key, required this.slides, this.height = 250});
   @override
   State<HeroSlider> createState() => _HeroSliderState();
 }
 
 class _HeroSliderState extends State<HeroSlider> {
-  final PageController _pc = PageController(viewportFraction: 0.92);
+  PageController _pc = PageController(viewportFraction: 0.94);
+  double _fraction = 0.94;
+
+  /// Slide width follows the screen: full width minus a small margin on
+  /// phones, capped on tablets / computers so slides don't get too wide.
+  void _fitTo(double screenWidth) {
+    if (screenWidth <= 0) return;
+    final slideWidth = (screenWidth - 24).clamp(280.0, 640.0);
+    final f = (slideWidth + 8) / screenWidth;
+    final fraction = f > 1 ? 1.0 : f;
+    if ((fraction - _fraction).abs() < 0.01) return;
+    final old = _pc;
+    _fraction = fraction;
+    _pc = PageController(viewportFraction: fraction, initialPage: _page);
+    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+  }
   Timer? _timer;
   int _page = 0;
 
@@ -1878,6 +1992,7 @@ class _HeroSliderState extends State<HeroSlider> {
   Widget build(BuildContext context) {
     final slides = widget.slides;
     if (slides.isEmpty) return const SizedBox.shrink();
+    _fitTo(MediaQuery.sizeOf(context).width);
     return Column(
       children: [
         SizedBox(
@@ -2227,11 +2342,11 @@ class _TipstersTabState extends State<TipstersTab> with ReloadOnLogin<TipstersTa
     final visible = onlyFollowed ? tipsters.where((t) => _asBool(t['is_following'])).toList() : tipsters;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('MIKEKA APP'),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: reload)],
-      ),
-      body: loading
+      // No title bar: the slider is the first thing on the screen.
+      // Pull down to refresh.
+      body: SafeArea(
+        bottom: false,
+        child: loading
           ? skeletonHome()
           : RefreshIndicator(
               color: AppColors.accent,
@@ -2303,6 +2418,7 @@ class _TipstersTabState extends State<TipstersTab> with ReloadOnLogin<TipstersTa
                       ],
                     ),
             ),
+      ),
     );
   }
 
@@ -2958,7 +3074,6 @@ class _MikekaTabState extends State<MikekaTab> with ReloadOnLogin<MikekaTab> {
                 onBuy: () => startPackagePurchase(context, packageType: p.type),
               ),
             )),
-        _noticeBox(AppState.I.responsibleNotice, icon: Icons.info_outline, color: AppColors.red),
       ],
     );
   }
@@ -4399,49 +4514,65 @@ class NetworkSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nets = AppState.I.networks;
-    return Row(
-      children: [
-        for (var i = 0; i < nets.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(selected == nets[i].code ? null : nets[i].code),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected == nets[i].code ? color.withOpacity(0.12) : AppColors.bg2,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected == nets[i].code ? color : AppColors.border,
-                    width: selected == nets[i].code ? 2 : 1,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: nets[i].color, borderRadius: BorderRadius.circular(7)),
-                      child: Text(nets[i].initial,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14)),
+    // 2 per row on narrow phones, 4 per row on wider screens.
+    return LayoutBuilder(builder: (context, box) {
+      final perRow = box.maxWidth < 340 ? 2 : 4;
+      const gap = 8.0;
+      final w = (box.maxWidth - gap * (perRow - 1)) / perRow;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [
+          for (final n in nets)
+            SizedBox(
+              width: w,
+              child: GestureDetector(
+                onTap: () => onChanged(selected == n.code ? null : n.code),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: selected == n.code ? color.withOpacity(0.12) : AppColors.bg2,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: selected == n.code ? color : AppColors.border,
+                      width: selected == n.code ? 2 : 1,
                     ),
-                    const SizedBox(height: 4),
-                    Text(nets[i].name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: selected == nets[i].code ? color : AppColors.muted,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800)),
-                  ],
+                  ),
+                  child: Column(
+                    children: [
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          NetworkLogo(net: n),
+                          if (selected == n.code)
+                            Positioned(
+                              right: -4,
+                              top: -4,
+                              child: Container(
+                                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                padding: const EdgeInsets.all(2),
+                                child: const Icon(Icons.check, size: 12, color: Colors.black),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(n.wallet,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: selected == n.code ? color : AppColors.muted,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800)),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
         ],
-      ],
-    );
+      );
+    });
   }
 }
 
@@ -4492,12 +4623,6 @@ mixin PaymentFlow<T extends StatefulWidget> on State<T> {
                     'Ujumbe wa malipo umetumwa kwenye simu yako na mtandao wako. Thibitisha malipo kwenye simu yako.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Usiandike PIN yako kwenye app hii wala kumpa mtu yeyote.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 14),
                   Text(phoneCtrl.text, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
@@ -4585,7 +4710,7 @@ mixin PaymentFlow<T extends StatefulWidget> on State<T> {
           decoration: InputDecoration(
             hintText: '0762xxxxxx au 255762xxxxxx',
             prefixIcon: Icon(Icons.phone, color: color),
-            helperText: 'Halopesa, Yas, Vodacom, au Airtel',
+            helperText: 'M-Pesa, Mixx by Yas, Airtel Money au HaloPesa',
             helperStyle: const TextStyle(color: AppColors.muted, fontSize: 10),
           ),
           inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)],
@@ -4598,8 +4723,6 @@ mixin PaymentFlow<T extends StatefulWidget> on State<T> {
           color: color,
           onChanged: (v) => setState(() => selectedNetwork = v),
         ),
-        const SizedBox(height: 12),
-        _noticeBox(AppState.I.pinSafetyNotice, icon: Icons.shield_outlined, color: AppColors.success),
       ],
     );
   }
