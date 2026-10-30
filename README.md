@@ -1,4 +1,4 @@
-# MIKEKA APP — FLUTTER MOBILE APPLICATION
+# MIKEKA YANGU APP — FLUTTER MOBILE APPLICATION
 
 Programu kamili ya simu ya Mikeka ya Leo Tanzania (Single-File Complete Flutter App).
 Huu mradi umejengwa kwa kutumia faili kamili la Dart (`lib/main.dart`) linalounganishwa na **MIKEKA APP REST API v1**:

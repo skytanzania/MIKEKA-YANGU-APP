@@ -1,5 +1,5 @@
 // ============================================================
-// MIKEKA APP - FLUTTER MOBILE APPLICATION
+// MIKEKA YANGU APP - FLUTTER MOBILE APPLICATION
 // Single-file app for the MIKEKA APP REST API v1:
 //   https://mikekaapp.co.tz/api.php   (docs: https://mikekaapp.co.tz/api.php?route=docs)
 //
@@ -49,8 +49,8 @@ void main() async {
 // ============================================================
 class AppConfig {
   static const String API_BASE = 'https://mikekaapp.co.tz/api.php';
-  static const String APP_NAME = 'MIKEKA APP';
-  static const String VERSION = '1.5.0';
+  static const String APP_NAME = 'MIKEKA YANGU APP';
+  static const String VERSION = '1.6.0';
   static const String DEFAULT_WASHINDI_URL = 'https://odds-mikeka.mikekaapp.co.tz/users.php';
   static const String SUPPORT_EMAIL = 'admin@mikekaapp.co.tz';
 
@@ -818,11 +818,11 @@ class AppState extends ChangeNotifier {
   String washindiUrl = AppConfig.DEFAULT_WASHINDI_URL;
   String supportEmail = AppConfig.SUPPORT_EMAIL;
   String pinSafetyNotice =
-      'MIKEKA APP haitakuuliza PIN yako ya M-Pesa, Mixx by Yas, Airtel Money au HaloPesa kwenye app. PIN unaiweka kwenye simu yako tu, kwenye ujumbe wa malipo (USSD) wa mtandao wako.';
+      'MIKEKA YANGU APP haitakuuliza PIN yako ya M-Pesa, Mixx by Yas, Airtel Money au HaloPesa kwenye app. PIN unaiweka kwenye simu yako tu, kwenye ujumbe wa malipo (USSD) wa mtandao wako.';
   String responsibleNotice =
       '18+ Cheza kwa uwajibikaji. Kubeti kuna hatari ya kupoteza pesa — hakuna mkeka wenye uhakika wa kushinda 100%.';
   String disclaimer =
-      'MIKEKA APP ni huduma ya uchambuzi wa mikeka, Tanzania. Hatuhusiani na wala hatuwakilishi kampuni yoyote ya kubeti wala mtandao wowote wa simu.';
+      'MIKEKA YANGU APP ni huduma ya uchambuzi wa mikeka, Tanzania. Hatuhusiani na wala hatuwakilishi kampuni yoyote ya kubeti wala mtandao wowote wa simu.';
   List<String> privacyPolicy = [];
   List<String> terms = [];
   int pollIntervalSeconds = 2;
@@ -1146,7 +1146,7 @@ class _SplashScreenState extends State<SplashScreen> {
               Icon(Icons.casino, size: 90, color: AppColors.accent),
               SizedBox(height: 20),
               Text(
-                'MIKEKA APP',
+                'MIKEKA YANGU APP',
                 style: TextStyle(
                   color: AppColors.accent,
                   fontSize: 26,
