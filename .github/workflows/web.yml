@@ -44,10 +44,8 @@ jobs:
           flutter build web --release --base-href /app/ --no-source-maps
           cp .github/web-htaccess build/web/.htaccess
           cp .github/web-kill-sw.js build/web/flutter_service_worker.js
-          # Pre-compressed copies: Apache serves the small .gz file when the
-          # browser accepts gzip (main.dart.js ~2.5 MB -> ~0.7 MB).
-          find build/web -type f \( -name '*.js' -o -name '*.json' -o -name '*.wasm' -o -name '*.html' -o -name '*.otf' -o -name '*.ttf' \) \
-            -exec gzip -9 -k -f {} \;
+          # No .gz copies in the download (Chrome flags zips full of archives);
+          # the server compresses on the fly instead (.htaccess, mod_deflate).
           # Keep the cPanel files apart: the Pages build below reuses build/web.
           rm -rf cpanel-site && cp -r build/web cpanel-site
 
@@ -61,6 +59,38 @@ jobs:
           include-hidden-files: true   # keeps .htaccess
           if-no-files-found: error
           retention-days: 30
+
+      # Automatic upload to cPanel — no download needed.
+      # Add these repository secrets once (Settings → Secrets and variables → Actions):
+      #   FTP_SERVER    e.g. ftp.mikekaapp.co.tz
+      #   FTP_USERNAME  cPanel FTP user (cPanel → FTP Accounts)
+      #   FTP_PASSWORD  its password
+      #   FTP_SERVER_DIR (optional) folder from the FTP login, default public_html/app/
+      - name: Check FTP secrets
+        id: ftp
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          if [ -n "$FTP_SERVER" ] && [ -n "$FTP_USERNAME" ] && [ -n "$FTP_PASSWORD" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=cPanel auto-upload off::Add FTP_SERVER, FTP_USERNAME and FTP_PASSWORD secrets to upload the web app to mikekaapp.co.tz/app/ automatically."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload to cPanel (mikekaapp.co.tz/app/)
+        if: steps.ftp.outputs.ok == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: cpanel-site/
+          server-dir: ${{ secrets.FTP_SERVER_DIR || 'public_html/app/' }}
+          dangerous-clean-slate: false
 
       - name: Build for GitHub Pages
         run: |

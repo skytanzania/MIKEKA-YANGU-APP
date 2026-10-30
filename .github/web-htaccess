@@ -3,36 +3,18 @@ AddType application/wasm .wasm
 AddType application/manifest+json .webmanifest
 Options -MultiViews
 
-<IfModule mod_rewrite.c>
-  RewriteEngine On
-  # Serve the pre-compressed .gz copy when the browser accepts gzip.
-  RewriteCond %{HTTP:Accept-Encoding} gzip
-  RewriteCond %{REQUEST_FILENAME}.gz -f
-  RewriteRule ^(.+)\.(js|json|wasm|html|otf|ttf)$ $1.$2.gz [L]
-  RewriteRule \.js\.gz$   - [T=application/javascript,E=no-gzip:1]
-  RewriteRule \.json\.gz$ - [T=application/json,E=no-gzip:1]
-  RewriteRule \.wasm\.gz$ - [T=application/wasm,E=no-gzip:1]
-  RewriteRule \.html\.gz$ - [T=text/html,E=no-gzip:1]
-  RewriteRule \.otf\.gz$  - [T=font/otf,E=no-gzip:1]
-  RewriteRule \.ttf\.gz$  - [T=font/ttf,E=no-gzip:1]
+# Compress on the fly (main.dart.js ~2.5 MB -> ~0.7 MB over the network).
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain application/javascript text/javascript application/json application/manifest+json application/wasm font/otf font/ttf image/svg+xml
 </IfModule>
 
 <IfModule mod_headers.c>
-  <FilesMatch "\.gz$">
-    Header set Content-Encoding gzip
-    Header append Vary Accept-Encoding
-  </FilesMatch>
   # App entry files: always check for a new version.
-  <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js|main\.dart\.js|manifest\.json|version\.json)(\.gz)?$">
+  <FilesMatch "^(index\.html|flutter_bootstrap\.js|flutter_service_worker\.js|main\.dart\.js|manifest\.json|version\.json)$">
     Header set Cache-Control "no-cache"
   </FilesMatch>
   # Fonts, icons, images, engine: keep for 30 days.
-  <FilesMatch "\.(png|jpg|jpeg|svg|ico|otf|ttf|woff2?|wasm)(\.gz)?$">
+  <FilesMatch "\.(png|jpg|jpeg|svg|ico|otf|ttf|woff2?|wasm)$">
     Header set Cache-Control "public, max-age=2592000"
   </FilesMatch>
-</IfModule>
-
-# Fallback if pre-compressed files are not used.
-<IfModule mod_deflate.c>
-  AddOutputFilterByType DEFLATE text/html application/javascript text/javascript application/json application/wasm font/otf font/ttf
 </IfModule>
